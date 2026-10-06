@@ -111,7 +111,6 @@ a = Analysis(
         "PySide6",
         "matplotlib.tests",
         "numpy.tests",
-        "torch.testing._internal",
     ],
     noarchive=False,
     optimize=1,

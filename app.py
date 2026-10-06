@@ -1091,6 +1091,21 @@ def health():
     return jsonify({"ok": not issues, "issues": issues, "whisperx_version": wx})
 
 
+def _backend_self_test() -> None:
+    """Verify the frozen ML backend can import without downloading model weights."""
+    import torch
+    import whisperx
+    from whisperx.diarize import DiarizationPipeline
+
+    # Importing DiarizationPipeline is the important packaging check. Do not
+    # instantiate it here because that would require model access/downloads.
+    _ = DiarizationPipeline
+    print(
+        f"Backend self-test OK: torch {torch.__version__}, "
+        f"WhisperX {whisperx_version() or 'unknown'}"
+    )
+
+
 def _open_browser() -> None:
     try:
         webbrowser.open(f"http://{APP_HOST}:{APP_PORT}")
@@ -1099,6 +1114,10 @@ def _open_browser() -> None:
 
 
 if __name__ == "__main__":
+    if "--self-test-backend" in sys.argv:
+        _backend_self_test()
+        raise SystemExit(0)
+
     print(f"{APP_NAME}: http://{APP_HOST}:{APP_PORT}")
     print(f"Work directory: {DEFAULT_WORKDIR}")
     if os.environ.get("WHISPERX_UI_NO_BROWSER") != "1":
