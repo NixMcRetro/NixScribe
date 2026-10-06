@@ -19,10 +19,10 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python 3.13
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
           cache: 'pip'
@@ -35,8 +35,41 @@ jobs:
           chmod +x build_macos_app.sh
           ./build_macos_app.sh
 
+      - name: Verify macOS bundle
+        run: |
+          file "dist/NixScribe.app/Contents/MacOS/NixScribe"
+          file "dist/NixScribe.app/Contents/MacOS/NixScribe" | grep -q "arm64"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "dist/NixScribe.app"
+
+      - name: Smoke-test frozen app
+        shell: bash
+        run: |
+          set -euo pipefail
+          export WHISPERX_UI_NO_BROWSER=1
+          "dist/NixScribe.app/Contents/MacOS/NixScribe" > /tmp/nixscribe-smoke.log 2>&1 &
+          APP_PID=$!
+
+          cleanup() {
+            kill "$APP_PID" >/dev/null 2>&1 || true
+            wait "$APP_PID" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for attempt in {1..30}; do
+            if curl -fsS "http://127.0.0.1:8765/" > /tmp/nixscribe-index.html; then
+              grep -q "<title>NixScribe</title>" /tmp/nixscribe-index.html
+              echo "Frozen NixScribe app launched and served its UI successfully."
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "NixScribe did not become ready during the smoke test."
+          cat /tmp/nixscribe-smoke.log
+          exit 1
+
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NixScribe-macOS-arm64
           path: dist/NixScribe-macOS-arm64.zip
