@@ -124,14 +124,14 @@
   <section class="card">
     <div class="grid">
       <div class="span2">
-        <label for="inputFile">Audio file</label>
+        <label for="inputFile">Audio or video file</label>
         <div class="file-row">
-          <input id="inputFile" placeholder="/path/to/recording.wav">
+          <input id="inputFile" placeholder="/path/to/recording.mkv">
           <button id="browseBtn" type="button">Choose…</button>
           <button id="refreshBtn" type="button">Recent files</button>
         </div>
         <select id="recentFiles" class="hidden" style="margin-top:8px"></select>
-        <div class="hint" style="margin-top:6px">You can point this directly at WAV, M4A, MP3, FLAC, AAC and other ffmpeg-readable media. No pre-conversion is required.</div>
+        <div class="hint" style="margin-top:6px">Choose audio or video directly, including WAV, M4A, MP3, FLAC, AAC, MKV, MP4, MOV, WebM, AVI and other ffmpeg-readable media. NixScribe extracts a temporary 16 kHz mono WAV automatically.</div>
       </div>
 
       <div class="span2">
