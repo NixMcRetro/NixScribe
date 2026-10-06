@@ -1,0 +1,29 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.build-venv/
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# Local secrets / environment
+.env
+.env.*
+*.token
+
+# Local transcription data
+projects/
+out/
+wav/
+recordings/
+
+# Local caches and model data if someone redirects them into the repo
+.cache/
+models/
+Models/
