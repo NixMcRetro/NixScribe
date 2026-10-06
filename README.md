@@ -124,7 +124,7 @@ If a project with the same recording name already exists, the next one is named 
 
 **Copy the original recording into each project folder** is enabled by default. Disable it if you do not want to duplicate large recordings; the source is then read in place and is never modified or deleted.
 
-WhisperX/ffmpeg decodes and resamples audio as part of processing, so the app normally creates no permanent intermediate WAV. If a job is cancelled or fails, its incomplete project folder is removed. The original source recording is never automatically deleted.
+NixScribe creates a temporary 16 kHz mono PCM WAV inside the job’s hidden working directory before transcription. That working WAV is removed automatically after a successful job. If a job is cancelled or fails, the incomplete project folder and its working audio are removed. The original source media is never automatically deleted.
 
 ## Live transcription view
 
@@ -169,7 +169,7 @@ export WHISPERX_PROJECTS_DIR="$HOME/Documents/Transcripts"
 ./run.sh
 ```
 
-WhisperX/ffmpeg can decode common audio and media formats directly, so pre-converting every recording to 16 kHz mono WAV is optional.
+NixScribe accepts common audio and video containers such as WAV, M4A, MP3, FLAC, AAC, MKV, MP4, MOV, WebM and AVI. For every job it extracts the first audio stream to a temporary 16 kHz mono PCM WAV, uses that normalized WAV for WhisperX transcription and speaker diarization, then removes the temporary working audio when the job finishes. The original source file is never modified or deleted.
 
 ## GitHub hygiene
 
