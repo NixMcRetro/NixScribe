@@ -70,7 +70,9 @@ DEFAULT_PROJECTS_DIR = Path(
 ).expanduser()
 SUPPORTED_EXTENSIONS = {
     ".wav", ".mp3", ".m4a", ".aac", ".flac", ".aiff", ".aif",
-    ".ogg", ".opus", ".mp4", ".mov", ".mkv", ".webm",
+    ".ogg", ".opus",
+    ".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".wmv",
+    ".mpeg", ".mpg", ".ts", ".mts", ".m2ts", ".3gp",
 }
 MIN_WHISPERX = (3, 8, 4)
 
@@ -438,9 +440,128 @@ def _copy_source_with_progress(source: Path, destination: Path) -> None:
         raise
 
 
+def _probe_media_duration(path: Path) -> float | None:
+    """Return container duration in seconds when ffprobe can determine it."""
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            duration = float(proc.stdout.strip())
+            if duration > 0:
+                return duration
+    except Exception:
+        pass
+    return None
+
+
+def _extract_audio_to_wav(source: Path, destination: Path) -> None:
+    """Extract the first audio stream to a temporary 16 kHz mono PCM WAV."""
+    duration = _probe_media_duration(source)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-y",
+        "-i",
+        str(source),
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "pcm_s16le",
+        "-progress",
+        "pipe:1",
+        "-nostats",
+        str(destination),
+    ]
+
+    _update(
+        stage="Preparing audio",
+        detail="Extracting the audio stream to a temporary 16 kHz mono WAV…",
+        stage_percent=0.0,
+        overall_percent=2.0,
+    )
+    _append_log(f"Preparing working WAV from: {source.name}")
+
+    proc: subprocess.Popen[str] | None = None
+    recent_output: list[str] = []
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        assert proc.stdout is not None
+        for raw_line in proc.stdout:
+            _cancel_if_requested()
+            line = raw_line.strip()
+            if not line:
+                continue
+            recent_output.append(line)
+            recent_output = recent_output[-20:]
+
+            if line.startswith("out_time_us=") and duration:
+                try:
+                    seconds = int(line.split("=", 1)[1]) / 1_000_000.0
+                    percent = max(0.0, min(99.0, seconds * 100.0 / duration))
+                    _update(
+                        stage_percent=round(percent, 1),
+                        overall_percent=round(2.0 + 3.0 * percent / 100.0, 1),
+                    )
+                except (TypeError, ValueError):
+                    pass
+
+        returncode = proc.wait()
+        if returncode != 0 or not destination.is_file() or destination.stat().st_size == 0:
+            detail = "\n".join(recent_output[-8:])
+            raise RuntimeError(
+                "ffmpeg could not extract a usable audio stream from this file."
+                + (f"\n{detail}" if detail else "")
+            )
+
+        _update(stage_percent=100.0, overall_percent=5.0)
+        _append_log(f"Working WAV ready: {destination.name}")
+    except JobCancelled:
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        destination.unlink(missing_ok=True)
+        raise
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+
+
 def _run_job(config: dict[str, Any]) -> None:
     caffeinate_proc: subprocess.Popen[Any] | None = None
     project_dir: Path | None = None
+    work_dir: Path | None = None
     try:
         import torch
         import whisperx
@@ -465,14 +586,14 @@ def _run_job(config: dict[str, Any]) -> None:
         _update(projects_dir=str(projects_dir), project_dir=str(project_dir))
         _append_log(f"Project: {project_dir}")
 
-        working_input = input_path
+        source_for_job = input_path
         if bool(config.get("copy_original", True)):
             copied_input = project_dir / input_path.name
             _copy_source_with_progress(input_path, copied_input)
-            working_input = copied_input
-            _append_log(f"Original recording copied into project: {copied_input.name}")
+            source_for_job = copied_input
+            _append_log(f"Original media copied into project: {copied_input.name}")
         else:
-            _append_log("Original recording left in place; project will contain transcript files only")
+            _append_log("Original media left in place; project will contain transcript files only")
 
         hf_token = _get_hf_token()
         if not hf_token:
@@ -492,12 +613,16 @@ def _run_job(config: dict[str, Any]) -> None:
         except Exception:
             _append_log("Could not start caffeinate; continuing anyway")
 
+        work_dir = project_dir / ".nixscribe-work"
+        working_input = work_dir / "audio-16k-mono.wav"
+        _extract_audio_to_wav(source_for_job, working_input)
+
         _update(
             status="Running",
             stage="Loading audio",
-            detail="Decoding audio with ffmpeg and loading Whisper large-v3…",
+            detail="Loading the prepared 16 kHz mono WAV…",
             stage_percent=0.0,
-            overall_percent=2.0,
+            overall_percent=5.0,
             error=None,
         )
         _append_log(f"Input: {input_path}")
@@ -511,7 +636,7 @@ def _run_job(config: dict[str, Any]) -> None:
         _cancel_if_requested()
 
         audio = whisperx.load_audio(str(working_input))
-        _update(overall_percent=3.0, stage_percent=100.0)
+        _update(overall_percent=6.0, stage_percent=100.0)
         _cancel_if_requested()
 
         asr_options = {
@@ -534,7 +659,7 @@ def _run_job(config: dict[str, Any]) -> None:
             stage="Loading model",
             detail=f"Loading {config['model']} on CPU ({config['compute_type']})…",
             stage_percent=0.0,
-            overall_percent=4.0,
+            overall_percent=6.5,
         )
         _append_log("Loading Whisper ASR model")
 
@@ -550,14 +675,14 @@ def _run_job(config: dict[str, Any]) -> None:
             threads=int(config.get("threads", 0)) or 4,
             use_auth_token=hf_token,
         )
-        _update(stage_percent=100.0, overall_percent=7.0)
+        _update(stage_percent=100.0, overall_percent=8.0)
         _cancel_if_requested()
 
         _append_log("Transcription started")
         transcribe_cb = stage_callback(
             "Transcribing",
             "Whisper large-v3 is decoding speech…",
-            7.0,
+            8.0,
             66.0,
         )
         live_capture = LiveTranscriptCapture(sys.stdout, max_lines=30)
@@ -697,6 +822,10 @@ def _run_job(config: dict[str, Any]) -> None:
             projects_dir=str(projects_dir),
             project_dir=str(project_dir),
         )
+        if work_dir is not None and work_dir.exists():
+            shutil.rmtree(work_dir)
+            _append_log("Temporary working WAV removed")
+
         _append_log(f"Transcript: {txt_path}")
         _append_log(f"Subtitles: {srt_path}")
         _append_log("Job complete")
@@ -736,6 +865,11 @@ def _run_job(config: dict[str, Any]) -> None:
             error=error_text,
         )
     finally:
+        if work_dir is not None and work_dir.exists():
+            try:
+                shutil.rmtree(work_dir)
+            except Exception:
+                _append_log("Could not remove temporary working audio directory")
         if caffeinate_proc is not None:
             try:
                 caffeinate_proc.terminate()
