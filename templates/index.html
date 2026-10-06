@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NixScribe</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f4f4f6;
+      --card: rgba(255,255,255,.82);
+      --text: #17171a;
+      --muted: #6b6b73;
+      --line: rgba(0,0,0,.09);
+      --accent: #0a84ff;
+      --good: #268b43;
+      --bad: #c4382b;
+      --terminal: #111216;
+      --terminal-text: #e8e8ec;
+      --shadow: 0 12px 34px rgba(0,0,0,.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #151517;
+        --card: rgba(35,35,39,.86);
+        --text: #f2f2f4;
+        --muted: #aaaab3;
+        --line: rgba(255,255,255,.10);
+        --shadow: 0 12px 34px rgba(0,0,0,.28);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .shell { max-width: 980px; margin: 38px auto 70px; padding: 0 20px; }
+    header { display: flex; justify-content: space-between; gap: 18px; align-items: end; margin-bottom: 20px; }
+    h1 { font-size: 30px; letter-spacing: -.5px; margin: 0 0 4px; }
+    .subtitle { color: var(--muted); font-size: 14px; }
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .badge { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; font-size: 12px; color: var(--muted); background: var(--card); }
+    .badge.good { color: var(--good); }
+    .badge.bad { color: var(--bad); }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 20px; margin-top: 16px; backdrop-filter: blur(18px); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .grid.three { grid-template-columns: 1fr 1fr 1fr; }
+    .span2 { grid-column: 1 / -1; }
+    label { display: block; font-size: 12px; font-weight: 650; margin: 0 0 6px; color: var(--muted); }
+    input, select, textarea, button { font: inherit; }
+    input, select, textarea {
+      width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px;
+      background: rgba(127,127,127,.055); color: var(--text); outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255,.13); }
+    textarea { min-height: 72px; resize: vertical; }
+    .file-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+    button {
+      border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 650;
+      background: rgba(127,127,127,.14); color: var(--text);
+    }
+    button.primary { background: var(--accent); color: white; }
+    button.danger { color: var(--bad); }
+    button:disabled { opacity: .45; cursor: default; }
+    .actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .checkline { display: flex; align-items: center; gap: 8px; min-height: 42px; }
+    .checkline input { width: auto; }
+    .progress-head { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
+    .phase { font-size: 17px; font-weight: 700; }
+    .percent { font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 750; }
+    .bar { height: 13px; background: rgba(127,127,127,.16); border-radius: 999px; overflow: hidden; margin: 11px 0 8px; }
+    .bar > div { height: 100%; width: 0%; background: var(--accent); transition: width .35s ease; }
+    .stage-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .smallbar { height: 5px; background: rgba(127,127,127,.14); border-radius: 999px; overflow: hidden; margin-top: 6px; }
+    .smallbar > div { height: 100%; width: 0%; background: rgba(10,132,255,.62); transition: width .25s ease; }
+    .status-detail { color: var(--muted); margin-top: 12px; font-size: 13px; min-height: 20px; }
+    .terminal { background: var(--terminal); color: var(--terminal-text); border-radius: 12px; padding: 12px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow: auto; max-height: 220px; min-height: 95px; }
+    .preview { white-space: pre-wrap; overflow: auto; max-height: 520px; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,.07); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .live-preview { white-space: pre-wrap; overflow: auto; max-height: 360px; min-height: 170px; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,.07); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .hidden { display: none; }
+    .error { color: var(--bad); font-weight: 650; }
+    .files { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; font-size: 12px; }
+    .files code { word-break: break-all; }
+    .summary { display: flex; gap: 18px; color: var(--muted); font-size: 12px; flex-wrap: wrap; margin-top: 8px; }
+    @media (max-width: 720px) {
+      .grid, .grid.three { grid-template-columns: 1fr; }
+      .span2 { grid-column: auto; }
+      .file-row { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+      .badges { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div>
+      <h1>NixScribe</h1>
+      <div class="subtitle">Local transcription, forced timestamps and speaker diarization.</div>
+    </div>
+    <div class="badges">
+      <span id="wxBadge" class="badge">WhisperX {{ whisperx_version }}</span>
+      <span id="tokenBadge" class="badge {{ 'good' if hf_token_set else 'bad' }}">HF token {{ 'ready' if hf_token_set else 'missing' }}</span>
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="grid">
+      <div class="span2">
+        <label for="hfToken">Hugging Face token for speaker diarization</label>
+        <div class="file-row">
+          <input id="hfToken" type="password" autocomplete="off" placeholder="hf_… (stored securely in macOS Keychain)">
+          <button id="saveTokenBtn" type="button">Save token</button>
+          <button id="clearTokenBtn" type="button">Clear</button>
+        </div>
+        <div class="hint" style="margin-top:6px">The token is stored in your macOS Keychain and is never returned to this page. Once saved, you can launch the app from Finder without setting environment variables.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="grid">
+      <div class="span2">
+        <label for="inputFile">Audio file</label>
+        <div class="file-row">
+          <input id="inputFile" placeholder="/path/to/recording.wav">
+          <button id="browseBtn" type="button">Choose…</button>
+          <button id="refreshBtn" type="button">Recent files</button>
+        </div>
+        <select id="recentFiles" class="hidden" style="margin-top:8px"></select>
+        <div class="hint" style="margin-top:6px">You can point this directly at WAV, M4A, MP3, FLAC, AAC and other ffmpeg-readable media. No pre-conversion is required.</div>
+      </div>
+
+      <div class="span2">
+        <label for="projectsDir">Transcription projects location</label>
+        <div class="file-row">
+          <input id="projectsDir" value="{{ default_projects_dir }}">
+          <button id="browseProjectsBtn" type="button">Choose…</button>
+          <button id="openOutputBtn" type="button">Open</button>
+        </div>
+        <div class="hint" style="margin-top:6px">Each job gets its own folder here. If the same recording is transcribed again, a new folder such as “Recording (2)” is created rather than overwriting the first.</div>
+        <div class="checkline" style="margin-top:8px">
+          <input id="copyOriginal" type="checkbox" checked>
+          <label for="copyOriginal" style="margin:0;color:var(--text)">Copy the original recording into each project folder</label>
+        </div>
+        <div class="hint">Recommended: keeps the audio, TXT and SRT together as a portable transcription project.</div>
+      </div>
+
+      <div>
+        <label for="model">Whisper model</label>
+        <select id="model">
+          <option value="large-v3" selected>large-v3 — maximum quality</option>
+          <option value="large-v3-turbo">large-v3-turbo — faster</option>
+        </select>
+      </div>
+      <div>
+        <label for="computeType">CPU compute</label>
+        <select id="computeType">
+          <option value="float32" selected>float32 — maximum fidelity</option>
+          <option value="int8">int8 — much faster, slightly quantized</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:14px">
+      <div>
+        <label for="batchSize">Batch size</label>
+        <select id="batchSize">
+          <option>2</option>
+          <option selected>4</option>
+          <option>6</option>
+          <option>8</option>
+        </select>
+      </div>
+      <div>
+        <label for="speakerCount">Number of speakers</label>
+        <select id="speakerCount">
+          <option value="auto">Auto — let diarization decide</option>
+          <option value="1">1 speaker</option>
+          <option value="2" selected>2 speakers</option>
+          <option value="3">3 speakers</option>
+          <option value="4">4 speakers</option>
+          <option value="5">5 speakers</option>
+          <option value="6">6 speakers</option>
+          <option value="7">7 speakers</option>
+          <option value="8">8 speakers</option>
+          <option value="9">9 speakers</option>
+          <option value="10">10 speakers</option>
+        </select>
+        <div class="hint">Choose the exact count when you know it. Auto is useful when you genuinely do not.</div>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:14px">
+      <div>
+        <label for="initialPrompt">Context prompt (optional)</label>
+        <textarea id="initialPrompt" placeholder="Example: A two-person technical interview about computer repair. English."></textarea>
+        <div class="hint">Useful for domain/context. Keep it factual and short.</div>
+      </div>
+      <div>
+        <label for="hotwords">Names / uncommon terms (optional)</label>
+        <textarea id="hotwords" placeholder="Example: surname, product name, acronym, technical term"></textarea>
+        <div class="hint">Comma-separated names, brands, acronyms or technical vocabulary.</div>
+      </div>
+    </div>
+
+    <div class="checkline" style="margin-top:8px">
+      <input id="interleavedContext" type="checkbox" checked>
+      <label for="interleavedContext" style="margin:0;color:var(--text)">Use WhisperX interleaved context for better continuity on long/technical audio</label>
+    </div>
+
+    <div class="actions">
+      <button id="startBtn" class="primary">Transcribe</button>
+      <button id="cancelBtn" class="danger" disabled>Cancel</button>
+      <span id="formError" class="error"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="progress-head">
+      <div>
+        <div id="phase" class="phase">Idle</div>
+        <div id="status" class="hint">Choose an audio file to begin.</div>
+      </div>
+      <div id="overallPercent" class="percent">0.0%</div>
+    </div>
+    <div class="bar"><div id="overallBar"></div></div>
+    <div class="stage-row"><span>Current stage</span><span id="stagePercent">0.0%</span></div>
+    <div class="smallbar"><div id="stageBar"></div></div>
+    <div class="summary">
+      <span id="elapsed">Elapsed 00:00:00</span>
+      <span id="speakers">Speakers —</span>
+      <span id="jobStatus">Status Idle</span>
+      <span id="projectPath">Project —</span>
+    </div>
+    <div id="detail" class="status-detail"></div>
+  </section>
+
+  <section class="card">
+    <div class="progress-head">
+      <div>
+        <div class="phase">Live transcription</div>
+        <div id="livePosition" class="hint">Waiting for transcription to start.</div>
+      </div>
+      <div id="liveCount" class="badge">0 segments</div>
+    </div>
+    <div id="livePreview" class="live-preview" style="margin-top:12px">Decoded text will appear here while WhisperX is working.</div>
+    <div class="hint" style="margin-top:8px">During transcription this shows Whisper's decoded text and timestamps. Speaker labels appear after the diarization stage. With interleaved context enabled, WhisperX may decode chunks out of chronological order; the final TXT/SRT are restored to normal time order.</div>
+  </section>
+
+  <section class="card">
+    <label>Activity log</label>
+    <div id="log" class="terminal">Waiting.</div>
+  </section>
+
+  <section id="resultCard" class="card hidden">
+    <div class="progress-head">
+      <div class="phase">Transcript preview</div>
+      <button id="resultOpenBtn">Open output folder</button>
+    </div>
+    <div id="files" class="files"></div>
+    <div id="preview" class="preview" style="margin-top:14px"></div>
+  </section>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let wasRunning = false;
+
+function fmtTime(seconds) {
+  seconds = Math.max(0, Math.floor(Number(seconds || 0)));
+  const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+  const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+  const s = String(seconds % 60).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+async function jsonFetch(url, options={}) {
+  const res = await fetch(url, options);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+$('saveTokenBtn').addEventListener('click', async () => {
+  $('formError').textContent = '';
+  const token = $('hfToken').value.trim();
+  try {
+    await jsonFetch('/api/token', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'save', token})});
+    $('hfToken').value = '';
+    await poll();
+  } catch (e) { $('formError').textContent = e.message; }
+});
+
+$('clearTokenBtn').addEventListener('click', async () => {
+  $('formError').textContent = '';
+  try {
+    await jsonFetch('/api/token', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'clear'})});
+    $('hfToken').value = '';
+    await poll();
+  } catch (e) { $('formError').textContent = e.message; }
+});
+
+async function refreshFiles(show=true) {
+  try {
+    const data = await jsonFetch('/api/files');
+    const sel = $('recentFiles');
+    sel.innerHTML = '<option value="">Select a recent/local file…</option>' + data.files.map(p => `<option value="${p.replaceAll('&','&amp;').replaceAll('"','&quot;')}">${p}</option>`).join('');
+    if (show) sel.classList.remove('hidden');
+  } catch (e) {
+    $('formError').textContent = e.message;
+  }
+}
+
+async function poll() {
+  try {
+    const s = await jsonFetch('/api/status');
+    const op = Number(s.overall_percent || 0);
+    const sp = Number(s.stage_percent || 0);
+    $('phase').textContent = s.stage || 'Idle';
+    $('status').textContent = s.status || '';
+    $('detail').textContent = s.detail || '';
+    $('overallPercent').textContent = `${op.toFixed(1)}%`;
+    $('overallBar').style.width = `${op}%`;
+    $('stagePercent').textContent = `${sp.toFixed(1)}%`;
+    $('stageBar').style.width = `${sp}%`;
+    $('elapsed').textContent = `Elapsed ${fmtTime(s.elapsed_seconds)}`;
+    $('jobStatus').textContent = `Status ${s.status || 'Idle'}`;
+    $('projectPath').textContent = s.project_dir ? `Project ${s.project_dir}` : 'Project —';
+    $('speakers').textContent = s.detected_speakers?.length ? `Speakers ${s.detected_speakers.join(', ')}` : 'Speakers —';
+    $('livePosition').textContent = s.live_position || 'Waiting for transcription to start.';
+    const liveCount = Number(s.live_segment_count || 0);
+    $('liveCount').textContent = `${liveCount} segment${liveCount === 1 ? '' : 's'}`;
+    const liveText = s.live_preview || (s.running ? 'Waiting for the first decoded speech segment…' : 'Decoded text will appear here while WhisperX is working.');
+    if ($('livePreview').textContent !== liveText) {
+      $('livePreview').textContent = liveText;
+      $('livePreview').scrollTop = $('livePreview').scrollHeight;
+    }
+    $('log').textContent = (s.log && s.log.length) ? s.log.join('\n') : 'Waiting.';
+    $('log').scrollTop = $('log').scrollHeight;
+    $('startBtn').disabled = !!s.running;
+    $('cancelBtn').disabled = !s.running;
+    $('wxBadge').textContent = `WhisperX ${s.whisperx_version || 'not installed'}`;
+    $('tokenBadge').textContent = `HF token ${s.hf_token_set ? 'ready' : 'missing'}`;
+    $('tokenBadge').className = `badge ${s.hf_token_set ? 'good' : 'bad'}`;
+
+    if (!s.running && (s.preview || (s.files && s.files.length))) {
+      $('resultCard').classList.remove('hidden');
+      $('preview').textContent = s.preview || '';
+      $('files').innerHTML = (s.files || []).map(f => `<code>${f}</code>`).join('');
+    } else if (s.running) {
+      $('resultCard').classList.add('hidden');
+    }
+    wasRunning = !!s.running;
+  } catch (e) {
+    $('detail').textContent = `UI connection error: ${e.message}`;
+  }
+}
+
+$('browseBtn').addEventListener('click', async () => {
+  $('formError').textContent = '';
+  try {
+    const d = await jsonFetch('/api/browse', {method:'POST'});
+    if (d.ok && d.path) $('inputFile').value = d.path;
+  } catch (e) { $('formError').textContent = e.message; }
+});
+
+$('browseProjectsBtn').addEventListener('click', async () => {
+  $('formError').textContent = '';
+  try {
+    const d = await jsonFetch('/api/browse-projects', {method:'POST'});
+    if (d.ok && d.path) $('projectsDir').value = d.path;
+  } catch (e) { $('formError').textContent = e.message; }
+});
+
+$('refreshBtn').addEventListener('click', () => refreshFiles(true));
+$('recentFiles').addEventListener('change', e => {
+  if (e.target.value) $('inputFile').value = e.target.value;
+});
+
+$('startBtn').addEventListener('click', async () => {
+  $('formError').textContent = '';
+  const payload = {
+    input_file: $('inputFile').value.trim(),
+    projects_dir: $('projectsDir').value.trim(),
+    copy_original: $('copyOriginal').checked,
+    model: $('model').value,
+    compute_type: $('computeType').value,
+    batch_size: Number($('batchSize').value),
+    speaker_count: $('speakerCount').value,
+    interleaved_context: $('interleavedContext').checked,
+    initial_prompt: $('initialPrompt').value.trim(),
+    hotwords: $('hotwords').value.trim(),
+  };
+  try {
+    await jsonFetch('/api/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    await poll();
+  } catch (e) { $('formError').textContent = e.message; }
+});
+
+$('cancelBtn').addEventListener('click', async () => {
+  try { await jsonFetch('/api/cancel', {method:'POST'}); }
+  catch (e) { $('formError').textContent = e.message; }
+});
+
+async function openOutput() {
+  try {
+    await jsonFetch('/api/open-output', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:''})});
+  } catch (e) { $('formError').textContent = e.message; }
+}
+$('openOutputBtn').addEventListener('click', openOutput);
+$('resultOpenBtn').addEventListener('click', openOutput);
+
+refreshFiles(false);
+poll();
+setInterval(poll, 750);
+</script>
+</body>
+</html>
