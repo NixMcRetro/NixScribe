@@ -86,7 +86,7 @@ STATE: dict[str, Any] = {
     "stage": "Idle",
     "stage_percent": 0.0,
     "overall_percent": 0.0,
-    "detail": "Choose an audio file to begin.",
+    "detail": "Choose an audio or video file to begin.",
     "started_at": None,
     "elapsed_seconds": 0.0,
     "input_file": None,
@@ -328,7 +328,7 @@ def _fmt_ts(seconds: float | None) -> str:
 
 
 def _speaker_label(seg: dict[str, Any]) -> str:
-    return str(seg.get("speaker") or "SPEAKER_00")
+    return str(seg.get("speaker") or "UNKNOWN")
 
 
 def _write_txt(result: dict[str, Any], audio_path: Path, output_dir: Path) -> Path:
@@ -578,7 +578,7 @@ def _run_job(config: dict[str, Any]) -> None:
         projects_dir = Path(config["projects_dir"]).expanduser().resolve()
 
         if not input_path.is_file():
-            raise FileNotFoundError(f"Audio file not found: {input_path}")
+            raise FileNotFoundError(f"Media file not found: {input_path}")
 
         projects_dir.mkdir(parents=True, exist_ok=True)
         project_dir = _unique_project_dir(projects_dir, input_path.stem)
@@ -595,11 +595,13 @@ def _run_job(config: dict[str, Any]) -> None:
         else:
             _append_log("Original media left in place; project will contain transcript files only")
 
+        speaker_count = int(config["speaker_count"]) if config.get("speaker_count") else None
+
         hf_token = _get_hf_token()
-        if not hf_token:
+        if speaker_count != 1 and not hf_token:
             raise RuntimeError(
                 "No Hugging Face token is configured. Save one in the app settings (or set "
-                "HF_TOKEN when running from source) for pyannote speaker diarization."
+                "HF_TOKEN when running from source) for multi-speaker pyannote diarization."
             )
 
         # Keep the Mac awake only while a transcription job is running.
@@ -681,7 +683,7 @@ def _run_job(config: dict[str, Any]) -> None:
         _append_log("Transcription started")
         transcribe_cb = stage_callback(
             "Transcribing",
-            "Whisper large-v3 is decoding speech…",
+            f"Whisper {config['model']} is decoding speech…",
             8.0,
             66.0,
         )
@@ -693,7 +695,6 @@ def _run_job(config: dict[str, Any]) -> None:
                 chunk_size=30,
                 verbose=True,
                 progress_callback=transcribe_cb,
-                interleaved_context=bool(config.get("interleaved_context", True)),
             )
         _update(
             live_preview=_raw_preview_from_segments(result.get("segments", [])),
@@ -740,53 +741,76 @@ def _run_job(config: dict[str, Any]) -> None:
         _torch_cleanup(torch)
         _cancel_if_requested()
 
-        speaker_count = int(config["speaker_count"]) if config.get("speaker_count") else None
-        min_speakers = speaker_count
-        max_speakers = speaker_count
+        if speaker_count == 1:
+            _update(
+                stage="Assigning speaker",
+                detail="Single-speaker mode: assigning SPEAKER_00 without diarization…",
+                stage_percent=0.0,
+                overall_percent=84.0,
+            )
+            for seg in result.get("segments", []):
+                seg["speaker"] = "SPEAKER_00"
+                for word in seg.get("words", []):
+                    word["speaker"] = "SPEAKER_00"
+            speakers = ["SPEAKER_00"]
+            _update(stage_percent=100.0, overall_percent=97.0)
+            _append_log("Single-speaker mode: pyannote diarization skipped")
+        else:
+            _update(
+                stage="Loading diarization",
+                detail="Loading pyannote Community-1 speaker diarization…",
+                stage_percent=0.0,
+                overall_percent=83.0,
+            )
+            diarize_model = DiarizationPipeline(
+                model_name="pyannote/speaker-diarization-community-1",
+                token=hf_token,
+                device="cpu",
+            )
+            _update(stage_percent=2.0, overall_percent=84.0)
+            _append_log("Speaker diarization started")
 
-        _update(
-            stage="Loading diarization",
-            detail="Loading pyannote Community-1 speaker diarization…",
-            stage_percent=0.0,
-            overall_percent=83.0,
-        )
-        diarize_model = DiarizationPipeline(
-            model_name="pyannote/speaker-diarization-community-1",
-            token=hf_token,
-            device="cpu",
-        )
-        _update(stage_percent=2.0, overall_percent=84.0)
-        _append_log("Speaker diarization started")
+            diarize_cb = stage_callback(
+                "Identifying speakers",
+                "Detecting speaker turns and assigning speaker IDs…",
+                84.0,
+                97.0,
+            )
+            diarize_kwargs: dict[str, Any] = {
+                "progress_callback": diarize_cb,
+            }
+            if speaker_count is not None:
+                diarize_kwargs["num_speakers"] = speaker_count
 
-        diarize_cb = stage_callback(
-            "Identifying speakers",
-            "Detecting speaker turns and assigning speaker IDs…",
-            84.0,
-            97.0,
-        )
-        diarize_segments = diarize_model(
-            str(working_input),
-            min_speakers=min_speakers,
-            max_speakers=max_speakers,
-            progress_callback=diarize_cb,
-        )
-        result = whisperx.assign_word_speakers(diarize_segments, result)
+            diarize_segments = diarize_model(
+                str(working_input),
+                **diarize_kwargs,
+            )
+            result = whisperx.assign_word_speakers(
+                diarize_segments,
+                result,
+                fill_nearest=True,
+            )
+            del diarize_model
+            _torch_cleanup(torch)
+            _cancel_if_requested()
+
+            speakers = sorted(
+                {
+                    seg.get("speaker")
+                    for seg in result.get("segments", [])
+                    if seg.get("speaker") is not None
+                }
+            )
+            _append_log(
+                f"Diarization finished: {len(speakers)} speaker label(s): "
+                f"{', '.join(speakers) or 'none'}"
+            )
+
         _update(
             live_preview=_final_preview_from_segments(result.get("segments", [])),
-            live_position="Speaker assignment complete — writing TXT and SRT…",
+            live_position="Speaker assignment complete; writing TXT and SRT…",
         )
-        del diarize_model
-        _torch_cleanup(torch)
-        _cancel_if_requested()
-
-        speakers = sorted(
-            {
-                seg.get("speaker")
-                for seg in result.get("segments", [])
-                if seg.get("speaker") is not None
-            }
-        )
-        _append_log(f"Diarization finished: {len(speakers)} speaker label(s): {', '.join(speakers) or 'none'}")
 
         _update(
             stage="Writing files",
@@ -950,7 +974,7 @@ def files():
 @app.post("/api/browse")
 def browse():
     # Native macOS chooser, because a local browser cannot reveal an arbitrary full POSIX path.
-    script = 'POSIX path of (choose file with prompt "Choose audio to transcribe")'
+    script = 'POSIX path of (choose file with prompt "Choose audio or video to transcribe")'
     try:
         proc = subprocess.run(
             ["/usr/bin/osascript", "-e", script],
@@ -994,7 +1018,7 @@ def start_job():
     input_file = str(payload.get("input_file", "")).strip()
     projects_dir = str(payload.get("projects_dir", str(DEFAULT_PROJECTS_DIR))).strip()
     if not input_file:
-        return jsonify({"ok": False, "error": "Choose an audio file first."}), 400
+        return jsonify({"ok": False, "error": "Choose an audio or video file first."}), 400
     if not projects_dir:
         return jsonify({"ok": False, "error": "Choose where transcription projects should be saved."}), 400
 
@@ -1015,7 +1039,6 @@ def start_job():
         "batch_size": max(1, min(16, int(payload.get("batch_size", 4)))),
         "threads": max(0, min(32, int(payload.get("threads", 0)))),
         "speaker_count": speaker_count,
-        "interleaved_context": bool(payload.get("interleaved_context", True)),
         "initial_prompt": str(payload.get("initial_prompt", "")).strip(),
         "hotwords": str(payload.get("hotwords", "")).strip(),
     }
@@ -1087,22 +1110,55 @@ def health():
     except Exception:
         issues.append("ffmpeg is not available in PATH.")
     if not _get_hf_token():
-        issues.append("No Hugging Face token is configured; diarization will not work.")
+        issues.append("No Hugging Face token is configured; multi-speaker diarization will not work.")
     return jsonify({"ok": not issues, "issues": issues, "whisperx_version": wx})
 
 
 def _backend_self_test() -> None:
-    """Verify the frozen ML backend can import without downloading model weights."""
+    """Verify frozen ML imports and the WhisperX API contract used by NixScribe."""
+    import inspect
+
     import torch
     import whisperx
+    from whisperx.asr import FasterWhisperPipeline
     from whisperx.diarize import DiarizationPipeline
 
-    # Importing DiarizationPipeline is the important packaging check. Do not
-    # instantiate it here because that would require model access/downloads.
-    _ = DiarizationPipeline
+    required = {
+        "FasterWhisperPipeline.transcribe": (
+            FasterWhisperPipeline.transcribe,
+            {"audio", "batch_size", "chunk_size", "verbose", "progress_callback"},
+        ),
+        "whisperx.align": (
+            whisperx.align,
+            {
+                "transcript",
+                "model",
+                "align_model_metadata",
+                "audio",
+                "device",
+                "interpolate_method",
+                "return_char_alignments",
+                "progress_callback",
+            },
+        ),
+        "DiarizationPipeline.__call__": (
+            DiarizationPipeline.__call__,
+            {"audio", "num_speakers", "progress_callback"},
+        ),
+    }
+
+    for name, (callable_obj, expected) in required.items():
+        actual = set(inspect.signature(callable_obj).parameters)
+        missing = expected - actual
+        if missing:
+            raise RuntimeError(
+                f"Unsupported WhisperX API for {name}; missing parameters: "
+                f"{sorted(missing)}"
+            )
+
     print(
         f"Backend self-test OK: torch {torch.__version__}, "
-        f"WhisperX {whisperx_version() or 'unknown'}"
+        f"WhisperX {whisperx_version() or 'unknown'}, API contract verified"
     )
 
 

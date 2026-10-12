@@ -41,7 +41,7 @@ jobs:
           file "dist/NixScribe.app/Contents/MacOS/NixScribe" | grep -q "arm64"
           /usr/bin/codesign --verify --deep --strict --verbose=2 "dist/NixScribe.app"
 
-      - name: Verify packaged ML backend imports
+      - name: Verify packaged ML backend API
         run: |
           "dist/NixScribe.app/Contents/MacOS/NixScribe" --self-test-backend
 

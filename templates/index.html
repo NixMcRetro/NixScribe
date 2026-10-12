@@ -7,178 +7,235 @@
   <style>
     :root {
       color-scheme: light dark;
-      --bg: #f4f4f6;
-      --card: rgba(255,255,255,.82);
-      --text: #17171a;
-      --muted: #6b6b73;
+      --bg: #f3f4f7;
+      --surface: rgba(255,255,255,.86);
+      --surface-strong: #ffffff;
+      --surface-soft: rgba(118,118,128,.08);
+      --text: #16171a;
+      --muted: #6d7078;
       --line: rgba(0,0,0,.09);
       --accent: #0a84ff;
-      --good: #268b43;
-      --bad: #c4382b;
-      --terminal: #111216;
-      --terminal-text: #e8e8ec;
-      --shadow: 0 12px 34px rgba(0,0,0,.08);
+      --accent-soft: rgba(10,132,255,.11);
+      --good: #248a3d;
+      --good-soft: rgba(36,138,61,.11);
+      --warn: #b76e00;
+      --bad: #c9342c;
+      --bad-soft: rgba(201,52,44,.10);
+      --terminal: #111318;
+      --terminal-text: #e9eaed;
+      --shadow: 0 18px 50px rgba(0,0,0,.07);
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #151517;
-        --card: rgba(35,35,39,.86);
-        --text: #f2f2f4;
-        --muted: #aaaab3;
+        --bg: #141518;
+        --surface: rgba(34,35,40,.88);
+        --surface-strong: #232429;
+        --surface-soft: rgba(255,255,255,.055);
+        --text: #f2f3f5;
+        --muted: #a7aab2;
         --line: rgba(255,255,255,.10);
-        --shadow: 0 12px 34px rgba(0,0,0,.28);
+        --accent-soft: rgba(10,132,255,.17);
+        --good-soft: rgba(48,209,88,.14);
+        --bad-soft: rgba(255,69,58,.13);
+        --shadow: 0 18px 55px rgba(0,0,0,.30);
       }
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
+      min-height: 100vh;
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(circle at 50% -20%, rgba(10,132,255,.10), transparent 36rem),
+        var(--bg);
       color: var(--text);
     }
-    .shell { max-width: 980px; margin: 38px auto 70px; padding: 0 20px; }
-    header { display: flex; justify-content: space-between; gap: 18px; align-items: end; margin-bottom: 20px; }
-    h1 { font-size: 30px; letter-spacing: -.5px; margin: 0 0 4px; }
-    .subtitle { color: var(--muted); font-size: 14px; }
-    .badges { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-    .badge { border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; font-size: 12px; color: var(--muted); background: var(--card); }
+    .shell { width: min(100% - 32px, 980px); margin: 34px auto 70px; }
+    .topbar {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+      padding: 4px 4px 18px;
+    }
+    h1 { margin: 0; font-size: 32px; letter-spacing: -.65px; line-height: 1.05; }
+    .subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
+    .status-stack { display: flex; align-items: flex-end; flex-direction: column; gap: 8px; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line);
+      background: var(--surface); border-radius: 999px; padding: 7px 11px; font-size: 12px;
+      font-weight: 700; box-shadow: 0 4px 16px rgba(0,0,0,.04);
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 4px var(--good-soft); }
+    .status-pill.working .dot { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .status-pill.error .dot { background: var(--bad); box-shadow: 0 0 0 4px var(--bad-soft); }
+    .microbadges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .badge {
+      border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
+      padding: 4px 8px; font-size: 11px; color: var(--muted);
+    }
     .badge.good { color: var(--good); }
     .badge.bad { color: var(--bad); }
-    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 20px; margin-top: 16px; backdrop-filter: blur(18px); }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .grid.three { grid-template-columns: 1fr 1fr 1fr; }
-    .span2 { grid-column: 1 / -1; }
-    label { display: block; font-size: 12px; font-weight: 650; margin: 0 0 6px; color: var(--muted); }
+    .card {
+      margin-top: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 18px;
+      background: var(--surface); box-shadow: var(--shadow); backdrop-filter: blur(18px);
+    }
+    .section-title {
+      margin: 0 0 13px; font-size: 11px; font-weight: 800; color: var(--muted);
+      letter-spacing: .09em; text-transform: uppercase;
+    }
+    .source-box {
+      display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+      padding: 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft);
+    }
+    .source-name { font-weight: 700; font-size: 14px; word-break: break-word; }
+    .source-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .path-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .grid.two { grid-template-columns: 1fr 1fr; }
+    label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 12px; font-weight: 650; }
     input, select, textarea, button { font: inherit; }
     input, select, textarea {
-      width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 11px;
-      background: rgba(127,127,127,.055); color: var(--text); outline: none;
+      width: 100%; color: var(--text); background: var(--surface-soft);
+      border: 1px solid var(--line); border-radius: 11px; padding: 10px 11px; outline: none;
     }
-    input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255,.13); }
-    textarea { min-height: 72px; resize: vertical; }
-    .file-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    textarea { min-height: 72px; resize: vertical; line-height: 1.4; }
     button {
-      border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 650;
-      background: rgba(127,127,127,.14); color: var(--text);
+      border: 1px solid var(--line); border-radius: 11px; padding: 10px 14px;
+      color: var(--text); background: var(--surface-soft); cursor: pointer; font-weight: 700;
     }
-    button.primary { background: var(--accent); color: white; }
-    button.danger { color: var(--bad); }
+    button:hover:not(:disabled) { border-color: rgba(10,132,255,.35); }
     button:disabled { opacity: .45; cursor: default; }
-    .actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
-    .hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
-    .checkline { display: flex; align-items: center; gap: 8px; min-height: 42px; }
+    button.primary {
+      min-width: 230px; padding: 12px 22px; border-color: transparent;
+      color: white; background: var(--accent); box-shadow: 0 7px 20px rgba(10,132,255,.22);
+    }
+    button.cancel { color: var(--bad); }
+    .hint { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .checkline { display: flex; gap: 9px; align-items: center; margin-top: 10px; }
     .checkline input { width: auto; }
-    .progress-head { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
-    .phase { font-size: 17px; font-weight: 700; }
-    .percent { font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 750; }
-    .bar { height: 13px; background: rgba(127,127,127,.16); border-radius: 999px; overflow: hidden; margin: 11px 0 8px; }
-    .bar > div { height: 100%; width: 0%; background: var(--accent); transition: width .35s ease; }
-    .stage-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-    .smallbar { height: 5px; background: rgba(127,127,127,.14); border-radius: 999px; overflow: hidden; margin-top: 6px; }
-    .smallbar > div { height: 100%; width: 0%; background: rgba(10,132,255,.62); transition: width .25s ease; }
-    .status-detail { color: var(--muted); margin-top: 12px; font-size: 13px; min-height: 20px; }
-    .terminal { background: var(--terminal); color: var(--terminal-text); border-radius: 12px; padding: 12px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow: auto; max-height: 220px; min-height: 95px; }
-    .preview { white-space: pre-wrap; overflow: auto; max-height: 520px; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,.07); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-    .live-preview { white-space: pre-wrap; overflow: auto; max-height: 360px; min-height: 170px; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; background: rgba(127,127,127,.07); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-    .hidden { display: none; }
-    .error { color: var(--bad); font-weight: 650; }
-    .files { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; font-size: 12px; }
-    .files code { word-break: break-all; }
-    .summary { display: flex; gap: 18px; color: var(--muted); font-size: 12px; flex-wrap: wrap; margin-top: 8px; }
-    @media (max-width: 720px) {
-      .grid, .grid.three { grid-template-columns: 1fr; }
-      .span2 { grid-column: auto; }
-      .file-row { grid-template-columns: 1fr; }
-      header { align-items: flex-start; flex-direction: column; }
-      .badges { justify-content: flex-start; }
+    .checkline label { margin: 0; color: var(--text); font-weight: 500; }
+    .actions { display: flex; justify-content: center; gap: 10px; margin-top: 18px; }
+    .advanced {
+      margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px;
+    }
+    details > summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 700; user-select: none; }
+    details > summary::marker { color: var(--muted); }
+    .progress-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+    .phase { font-size: 18px; font-weight: 760; letter-spacing: -.2px; }
+    .phase-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .percent { font-size: 26px; line-height: 1; font-weight: 760; font-variant-numeric: tabular-nums; }
+    .bar { height: 12px; margin: 14px 0 8px; background: var(--surface-soft); border-radius: 999px; overflow: hidden; }
+    .bar > div { height: 100%; width: 0; border-radius: inherit; background: var(--accent); transition: width .3s ease; }
+    .stage-line { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }
+    .smallbar { height: 4px; margin-top: 6px; background: var(--surface-soft); border-radius: 999px; overflow: hidden; }
+    .smallbar > div { height: 100%; width: 0; background: rgba(10,132,255,.65); }
+    .stats { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 13px; color: var(--muted); font-size: 12px; }
+    .detail { min-height: 18px; margin-top: 10px; color: var(--muted); font-size: 13px; }
+    .live {
+      min-height: 200px; max-height: 430px; overflow: auto; margin-top: 12px; padding: 15px;
+      border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft);
+      white-space: pre-wrap; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .error-card { border-color: rgba(201,52,44,.28); background: var(--bad-soft); }
+    .error-title { color: var(--bad); font-weight: 760; font-size: 17px; }
+    .error-text { margin-top: 7px; font-size: 13px; line-height: 1.45; word-break: break-word; }
+    .terminal {
+      margin-top: 10px; padding: 13px; max-height: 260px; overflow: auto; border-radius: 12px;
+      background: var(--terminal); color: var(--terminal-text); white-space: pre-wrap;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .result-list { display: grid; gap: 9px; margin-top: 12px; }
+    .result-file {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft);
+    }
+    .result-file code { color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+    .preview {
+      max-height: 500px; overflow: auto; margin-top: 14px; padding: 14px;
+      border: 1px solid var(--line); border-radius: 13px; background: var(--surface-soft);
+      white-space: pre-wrap; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .hidden { display: none !important; }
+    .form-error { color: var(--bad); text-align: center; margin-top: 9px; font-size: 12px; font-weight: 650; }
+    @media (max-width: 760px) {
+      .shell { width: min(100% - 20px, 980px); margin-top: 20px; }
+      .topbar { flex-direction: column; }
+      .status-stack { align-items: flex-start; }
+      .microbadges { justify-content: flex-start; }
+      .grid, .grid.two { grid-template-columns: 1fr; }
+      .path-row, .source-box { grid-template-columns: 1fr; }
+      button.primary { width: 100%; min-width: 0; }
+      .actions { flex-direction: column; }
     }
   </style>
 </head>
 <body>
 <div class="shell">
-  <header>
+  <header class="topbar">
     <div>
       <h1>NixScribe</h1>
-      <div class="subtitle">Local transcription, forced timestamps and speaker diarization.</div>
+      <div class="subtitle">Local transcription for macOS</div>
     </div>
-    <div class="badges">
-      <span id="wxBadge" class="badge">WhisperX {{ whisperx_version }}</span>
-      <span id="tokenBadge" class="badge {{ 'good' if hf_token_set else 'bad' }}">HF token {{ 'ready' if hf_token_set else 'missing' }}</span>
+    <div class="status-stack">
+      <div id="statusPill" class="status-pill"><span class="dot"></span><span id="statusLabel">Ready</span></div>
+      <div class="microbadges">
+        <span id="wxBadge" class="badge">WhisperX {{ whisperx_version }}</span>
+        <span id="tokenBadge" class="badge {{ 'good' if hf_token_set else 'bad' }}">HF {{ 'ready' if hf_token_set else 'missing' }}</span>
+      </div>
     </div>
   </header>
 
   <section class="card">
-    <div class="grid">
-      <div class="span2">
-        <label for="hfToken">Hugging Face token for speaker diarization</label>
-        <div class="file-row">
-          <input id="hfToken" type="password" autocomplete="off" placeholder="hf_… (stored securely in macOS Keychain)">
-          <button id="saveTokenBtn" type="button">Save token</button>
-          <button id="clearTokenBtn" type="button">Clear</button>
-        </div>
-        <div class="hint" style="margin-top:6px">The token is stored in your macOS Keychain and is never returned to this page. Once saved, you can launch the app from Finder without setting environment variables.</div>
+    <div class="section-title">Source</div>
+    <div class="source-box">
+      <div>
+        <div id="sourceName" class="source-name">No media selected</div>
+        <div id="sourceMeta" class="source-meta">Choose an audio or video file to begin.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button id="browseBtn" type="button">Choose…</button>
+        <button id="refreshBtn" type="button">Recent</button>
+      </div>
+    </div>
+    <input id="inputFile" class="hidden" placeholder="/path/to/recording.mkv">
+    <select id="recentFiles" class="hidden" style="margin-top:8px"></select>
+
+    <div style="margin-top:16px">
+      <label for="projectsDir">Save transcription projects to</label>
+      <div class="path-row">
+        <input id="projectsDir" value="{{ default_projects_dir }}">
+        <button id="browseProjectsBtn" type="button">Choose…</button>
+        <button id="openOutputBtn" type="button">Open</button>
+      </div>
+      <div class="checkline">
+        <input id="copyOriginal" type="checkbox" checked>
+        <label for="copyOriginal">Keep a copy of the original media in the project</label>
       </div>
     </div>
   </section>
 
   <section class="card">
+    <div class="section-title">Transcription</div>
     <div class="grid">
-      <div class="span2">
-        <label for="inputFile">Audio or video file</label>
-        <div class="file-row">
-          <input id="inputFile" placeholder="/path/to/recording.mkv">
-          <button id="browseBtn" type="button">Choose…</button>
-          <button id="refreshBtn" type="button">Recent files</button>
-        </div>
-        <select id="recentFiles" class="hidden" style="margin-top:8px"></select>
-        <div class="hint" style="margin-top:6px">Choose audio or video directly, including WAV, M4A, MP3, FLAC, AAC, MKV, MP4, MOV, WebM, AVI and other ffmpeg-readable media. NixScribe extracts a temporary 16 kHz mono WAV automatically.</div>
-      </div>
-
-      <div class="span2">
-        <label for="projectsDir">Transcription projects location</label>
-        <div class="file-row">
-          <input id="projectsDir" value="{{ default_projects_dir }}">
-          <button id="browseProjectsBtn" type="button">Choose…</button>
-          <button id="openOutputBtn" type="button">Open</button>
-        </div>
-        <div class="hint" style="margin-top:6px">Each job gets its own folder here. If the same recording is transcribed again, a new folder such as “Recording (2)” is created rather than overwriting the first.</div>
-        <div class="checkline" style="margin-top:8px">
-          <input id="copyOriginal" type="checkbox" checked>
-          <label for="copyOriginal" style="margin:0;color:var(--text)">Copy the original recording into each project folder</label>
-        </div>
-        <div class="hint">Recommended: keeps the audio, TXT and SRT together as a portable transcription project.</div>
-      </div>
-
       <div>
-        <label for="model">Whisper model</label>
+        <label for="model">Model</label>
         <select id="model">
-          <option value="large-v3" selected>large-v3 — maximum quality</option>
-          <option value="large-v3-turbo">large-v3-turbo — faster</option>
+          <option value="large-v3" selected>large-v3 · maximum quality</option>
+          <option value="large-v3-turbo">large-v3-turbo · faster</option>
         </select>
       </div>
       <div>
-        <label for="computeType">CPU compute</label>
+        <label for="computeType">Quality</label>
         <select id="computeType">
-          <option value="float32" selected>float32 — maximum fidelity</option>
-          <option value="int8">int8 — much faster, slightly quantized</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="grid" style="margin-top:14px">
-      <div>
-        <label for="batchSize">Batch size</label>
-        <select id="batchSize">
-          <option>2</option>
-          <option selected>4</option>
-          <option>6</option>
-          <option>8</option>
+          <option value="float32" selected>float32 · maximum fidelity</option>
+          <option value="int8">int8 · faster</option>
         </select>
       </div>
       <div>
-        <label for="speakerCount">Number of speakers</label>
+        <label for="speakerCount">Speakers</label>
         <select id="speakerCount">
-          <option value="auto">Auto — let diarization decide</option>
+          <option value="auto">Auto</option>
           <option value="1">1 speaker</option>
           <option value="2" selected>2 speakers</option>
           <option value="3">3 speakers</option>
@@ -190,85 +247,110 @@
           <option value="9">9 speakers</option>
           <option value="10">10 speakers</option>
         </select>
-        <div class="hint">Choose the exact count when you know it. Auto is useful when you genuinely do not.</div>
+        <div class="hint">Choose the exact count when known. One speaker skips diarization.</div>
       </div>
     </div>
 
-    <div class="grid" style="margin-top:14px">
+    <div class="grid two" style="margin-top:14px">
       <div>
-        <label for="initialPrompt">Context prompt (optional)</label>
+        <label for="hotwords">Names and uncommon terminology</label>
+        <textarea id="hotwords" placeholder="Surname, product name, acronym, technical term"></textarea>
+      </div>
+      <div>
+        <label for="initialPrompt">Context</label>
         <textarea id="initialPrompt" placeholder="Example: A two-person technical interview about computer repair. English."></textarea>
-        <div class="hint">Useful for domain/context. Keep it factual and short.</div>
-      </div>
-      <div>
-        <label for="hotwords">Names / uncommon terms (optional)</label>
-        <textarea id="hotwords" placeholder="Example: surname, product name, acronym, technical term"></textarea>
-        <div class="hint">Comma-separated names, brands, acronyms or technical vocabulary.</div>
       </div>
     </div>
 
-    <div class="checkline" style="margin-top:8px">
-      <input id="interleavedContext" type="checkbox" checked>
-      <label for="interleavedContext" style="margin:0;color:var(--text)">Use WhisperX interleaved context for better continuity on long/technical audio</label>
-    </div>
+    <details class="advanced">
+      <summary>Advanced settings</summary>
+      <div style="max-width:220px;margin-top:12px">
+        <label for="batchSize">Batch size</label>
+        <select id="batchSize">
+          <option>2</option>
+          <option selected>4</option>
+          <option>6</option>
+          <option>8</option>
+        </select>
+      </div>
+    </details>
 
     <div class="actions">
-      <button id="startBtn" class="primary">Transcribe</button>
-      <button id="cancelBtn" class="danger" disabled>Cancel</button>
-      <span id="formError" class="error"></span>
+      <button id="startBtn" class="primary">Start Transcription</button>
+      <button id="cancelBtn" class="cancel" disabled>Cancel</button>
     </div>
+    <div id="formError" class="form-error"></div>
   </section>
 
   <section class="card">
     <div class="progress-head">
       <div>
-        <div id="phase" class="phase">Idle</div>
-        <div id="status" class="hint">Choose an audio file to begin.</div>
+        <div id="phase" class="phase">Ready</div>
+        <div id="status" class="phase-sub">Choose an audio or video file to begin.</div>
       </div>
       <div id="overallPercent" class="percent">0.0%</div>
     </div>
     <div class="bar"><div id="overallBar"></div></div>
-    <div class="stage-row"><span>Current stage</span><span id="stagePercent">0.0%</span></div>
+    <div class="stage-line"><span id="stageLabel">Current stage</span><span id="stagePercent">0.0%</span></div>
     <div class="smallbar"><div id="stageBar"></div></div>
-    <div class="summary">
+    <div class="stats">
       <span id="elapsed">Elapsed 00:00:00</span>
       <span id="speakers">Speakers —</span>
-      <span id="jobStatus">Status Idle</span>
       <span id="projectPath">Project —</span>
     </div>
-    <div id="detail" class="status-detail"></div>
+    <div id="detail" class="detail"></div>
+  </section>
+
+  <section id="errorCard" class="card error-card hidden">
+    <div class="error-title">Transcription stopped</div>
+    <div id="errorText" class="error-text"></div>
+    <div class="hint">Open the activity log below for the full technical traceback.</div>
   </section>
 
   <section class="card">
     <div class="progress-head">
       <div>
-        <div class="phase">Live transcription</div>
-        <div id="livePosition" class="hint">Waiting for transcription to start.</div>
+        <div class="phase">Live transcript</div>
+        <div id="livePosition" class="phase-sub">Waiting for transcription to start.</div>
       </div>
       <div id="liveCount" class="badge">0 segments</div>
     </div>
-    <div id="livePreview" class="live-preview" style="margin-top:12px">Decoded text will appear here while WhisperX is working.</div>
-    <div class="hint" style="margin-top:8px">During transcription this shows Whisper's decoded text and timestamps. Speaker labels appear after the diarization stage. With interleaved context enabled, WhisperX may decode chunks out of chronological order; the final TXT/SRT are restored to normal time order.</div>
+    <div id="livePreview" class="live">Decoded text will appear here while WhisperX is working.</div>
+    <div class="hint">Speaker labels appear after diarization. Final TXT and SRT output remains chronological.</div>
   </section>
 
   <section class="card">
-    <label>Activity log</label>
-    <div id="log" class="terminal">Waiting.</div>
+    <details id="logDetails">
+      <summary>Activity log</summary>
+      <div id="log" class="terminal">Waiting.</div>
+    </details>
   </section>
 
   <section id="resultCard" class="card hidden">
     <div class="progress-head">
-      <div class="phase">Transcript preview</div>
-      <button id="resultOpenBtn">Open output folder</button>
+      <div>
+        <div class="phase">Transcription complete</div>
+        <div class="phase-sub">TXT transcript and SRT subtitles are ready.</div>
+      </div>
+      <button id="resultOpenBtn">Open Project Folder</button>
     </div>
-    <div id="files" class="files"></div>
-    <div id="preview" class="preview" style="margin-top:14px"></div>
+    <div id="files" class="result-list"></div>
+    <div id="preview" class="preview"></div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">Hugging Face</div>
+    <div class="path-row">
+      <input id="hfToken" type="password" autocomplete="off" placeholder="hf_… stored in macOS Keychain">
+      <button id="saveTokenBtn" type="button">Save token</button>
+      <button id="clearTokenBtn" type="button">Clear</button>
+    </div>
+    <div class="hint">Required for multi-speaker diarization. One-speaker jobs do not use Pyannote diarization.</div>
   </section>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
-let wasRunning = false;
 
 function fmtTime(seconds) {
   seconds = Math.max(0, Math.floor(Number(seconds || 0)));
@@ -278,6 +360,36 @@ function fmtTime(seconds) {
   return `${h}:${m}:${s}`;
 }
 
+function basename(path) {
+  if (!path) return '';
+  return path.replace(/\\/g, '/').split('/').filter(Boolean).pop() || path;
+}
+
+function updateSourceSummary() {
+  const path = $('inputFile').value.trim();
+  if (!path) {
+    $('sourceName').textContent = 'No media selected';
+    $('sourceMeta').textContent = 'Choose an audio or video file to begin.';
+    return;
+  }
+  $('sourceName').textContent = basename(path);
+  $('sourceMeta').textContent = 'Audio or video source · NixScribe will prepare a temporary 16 kHz mono WAV';
+}
+
+function setStatusPill(status, running) {
+  const pill = $('statusPill');
+  pill.className = 'status-pill';
+  if (running) pill.classList.add('working');
+  if (status === 'Error') pill.classList.add('error');
+
+  let label = 'Ready';
+  if (running) label = status === 'Starting' ? 'Preparing' : status;
+  else if (status === 'Complete') label = 'Complete';
+  else if (status === 'Cancelled') label = 'Cancelled';
+  else if (status === 'Error') label = 'Error';
+  $('statusLabel').textContent = label;
+}
+
 async function jsonFetch(url, options={}) {
   const res = await fetch(url, options);
   const data = await res.json();
@@ -285,11 +397,52 @@ async function jsonFetch(url, options={}) {
   return data;
 }
 
+function fillRecentFiles(paths) {
+  const sel = $('recentFiles');
+  sel.replaceChildren();
+
+  const first = document.createElement('option');
+  first.value = '';
+  first.textContent = 'Select a recent file…';
+  sel.appendChild(first);
+
+  for (const path of paths) {
+    const option = document.createElement('option');
+    option.value = path;
+    option.textContent = path;
+    sel.appendChild(option);
+  }
+}
+
+function fillResultFiles(paths) {
+  const list = $('files');
+  list.replaceChildren();
+
+  for (const path of paths) {
+    const row = document.createElement('div');
+    row.className = 'result-file';
+
+    const code = document.createElement('code');
+    code.textContent = path;
+
+    const kind = document.createElement('span');
+    kind.className = 'badge';
+    const lower = path.toLowerCase();
+    kind.textContent = lower.endsWith('.srt') ? 'SRT' : lower.endsWith('.txt') ? 'TXT' : 'File';
+
+    row.append(code, kind);
+    list.appendChild(row);
+  }
+}
+
 $('saveTokenBtn').addEventListener('click', async () => {
   $('formError').textContent = '';
-  const token = $('hfToken').value.trim();
   try {
-    await jsonFetch('/api/token', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'save', token})});
+    await jsonFetch('/api/token', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'save', token:$('hfToken').value.trim()})
+    });
     $('hfToken').value = '';
     await poll();
   } catch (e) { $('formError').textContent = e.message; }
@@ -298,7 +451,11 @@ $('saveTokenBtn').addEventListener('click', async () => {
 $('clearTokenBtn').addEventListener('click', async () => {
   $('formError').textContent = '';
   try {
-    await jsonFetch('/api/token', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'clear'})});
+    await jsonFetch('/api/token', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'clear'})
+    });
     $('hfToken').value = '';
     await poll();
   } catch (e) { $('formError').textContent = e.message; }
@@ -307,9 +464,8 @@ $('clearTokenBtn').addEventListener('click', async () => {
 async function refreshFiles(show=true) {
   try {
     const data = await jsonFetch('/api/files');
-    const sel = $('recentFiles');
-    sel.innerHTML = '<option value="">Select a recent/local file…</option>' + data.files.map(p => `<option value="${p.replaceAll('&','&amp;').replaceAll('"','&quot;')}">${p}</option>`).join('');
-    if (show) sel.classList.remove('hidden');
+    fillRecentFiles(data.files || []);
+    if (show) $('recentFiles').classList.remove('hidden');
   } catch (e) {
     $('formError').textContent = e.message;
   }
@@ -320,41 +476,55 @@ async function poll() {
     const s = await jsonFetch('/api/status');
     const op = Number(s.overall_percent || 0);
     const sp = Number(s.stage_percent || 0);
-    $('phase').textContent = s.stage || 'Idle';
-    $('status').textContent = s.status || '';
+
+    $('phase').textContent = s.stage === 'Idle' ? 'Ready' : (s.stage || 'Ready');
+    $('status').textContent = s.status === 'Idle' ? 'Choose an audio or video file to begin.' : (s.status || '');
     $('detail').textContent = s.detail || '';
     $('overallPercent').textContent = `${op.toFixed(1)}%`;
     $('overallBar').style.width = `${op}%`;
     $('stagePercent').textContent = `${sp.toFixed(1)}%`;
     $('stageBar').style.width = `${sp}%`;
     $('elapsed').textContent = `Elapsed ${fmtTime(s.elapsed_seconds)}`;
-    $('jobStatus').textContent = `Status ${s.status || 'Idle'}`;
     $('projectPath').textContent = s.project_dir ? `Project ${s.project_dir}` : 'Project —';
     $('speakers').textContent = s.detected_speakers?.length ? `Speakers ${s.detected_speakers.join(', ')}` : 'Speakers —';
     $('livePosition').textContent = s.live_position || 'Waiting for transcription to start.';
+
     const liveCount = Number(s.live_segment_count || 0);
     $('liveCount').textContent = `${liveCount} segment${liveCount === 1 ? '' : 's'}`;
-    const liveText = s.live_preview || (s.running ? 'Waiting for the first decoded speech segment…' : 'Decoded text will appear here while WhisperX is working.');
+    const liveText = s.live_preview || (s.running
+      ? 'Waiting for the first decoded speech segment…'
+      : 'Decoded text will appear here while WhisperX is working.');
     if ($('livePreview').textContent !== liveText) {
       $('livePreview').textContent = liveText;
       $('livePreview').scrollTop = $('livePreview').scrollHeight;
     }
+
     $('log').textContent = (s.log && s.log.length) ? s.log.join('\n') : 'Waiting.';
     $('log').scrollTop = $('log').scrollHeight;
     $('startBtn').disabled = !!s.running;
     $('cancelBtn').disabled = !s.running;
+
     $('wxBadge').textContent = `WhisperX ${s.whisperx_version || 'not installed'}`;
-    $('tokenBadge').textContent = `HF token ${s.hf_token_set ? 'ready' : 'missing'}`;
+    $('tokenBadge').textContent = `HF ${s.hf_token_set ? 'ready' : 'missing'}`;
     $('tokenBadge').className = `badge ${s.hf_token_set ? 'good' : 'bad'}`;
+    setStatusPill(s.status || 'Idle', !!s.running);
+
+    if (s.error) {
+      $('errorCard').classList.remove('hidden');
+      $('errorText').textContent = s.error;
+      $('logDetails').open = true;
+    } else {
+      $('errorCard').classList.add('hidden');
+      $('errorText').textContent = '';
+    }
 
     if (!s.running && (s.preview || (s.files && s.files.length))) {
       $('resultCard').classList.remove('hidden');
       $('preview').textContent = s.preview || '';
-      $('files').innerHTML = (s.files || []).map(f => `<code>${f}</code>`).join('');
+      fillResultFiles(s.files || []);
     } else if (s.running) {
       $('resultCard').classList.add('hidden');
     }
-    wasRunning = !!s.running;
   } catch (e) {
     $('detail').textContent = `UI connection error: ${e.message}`;
   }
@@ -364,7 +534,10 @@ $('browseBtn').addEventListener('click', async () => {
   $('formError').textContent = '';
   try {
     const d = await jsonFetch('/api/browse', {method:'POST'});
-    if (d.ok && d.path) $('inputFile').value = d.path;
+    if (d.ok && d.path) {
+      $('inputFile').value = d.path;
+      updateSourceSummary();
+    }
   } catch (e) { $('formError').textContent = e.message; }
 });
 
@@ -378,8 +551,12 @@ $('browseProjectsBtn').addEventListener('click', async () => {
 
 $('refreshBtn').addEventListener('click', () => refreshFiles(true));
 $('recentFiles').addEventListener('change', e => {
-  if (e.target.value) $('inputFile').value = e.target.value;
+  if (e.target.value) {
+    $('inputFile').value = e.target.value;
+    updateSourceSummary();
+  }
 });
+$('inputFile').addEventListener('input', updateSourceSummary);
 
 $('startBtn').addEventListener('click', async () => {
   $('formError').textContent = '';
@@ -391,12 +568,15 @@ $('startBtn').addEventListener('click', async () => {
     compute_type: $('computeType').value,
     batch_size: Number($('batchSize').value),
     speaker_count: $('speakerCount').value,
-    interleaved_context: $('interleavedContext').checked,
     initial_prompt: $('initialPrompt').value.trim(),
     hotwords: $('hotwords').value.trim(),
   };
   try {
-    await jsonFetch('/api/start', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    await jsonFetch('/api/start', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
     await poll();
   } catch (e) { $('formError').textContent = e.message; }
 });
@@ -408,12 +588,17 @@ $('cancelBtn').addEventListener('click', async () => {
 
 async function openOutput() {
   try {
-    await jsonFetch('/api/open-output', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:''})});
+    await jsonFetch('/api/open-output', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({path:''})
+    });
   } catch (e) { $('formError').textContent = e.message; }
 }
 $('openOutputBtn').addEventListener('click', openOutput);
 $('resultOpenBtn').addEventListener('click', openOutput);
 
+updateSourceSummary();
 refreshFiles(false);
 poll();
 setInterval(poll, 750);

@@ -31,10 +31,9 @@ For a recent Apple-silicon Mac with sufficient RAM, the default quality-first pr
 - Model: `large-v3`
 - Compute: `float32`
 - Batch size: `4`
-- Interleaved context: enabled
 - Speaker count: choose the exact number when known
 
-`int8` and `large-v3-turbo` remain available when speed matters more.
+`int8` and `large-v3-turbo` remain available when speed matters more. Selecting exactly one speaker skips pyannote diarization and does not require a Hugging Face token for that job.
 
 ## Build a self-contained macOS app
 
@@ -128,7 +127,7 @@ NixScribe creates a temporary 16 kHz mono PCM WAV inside the job’s hidden work
 
 ## Live transcription view
 
-While WhisperX is decoding, the app displays the most recently emitted timestamped segments and the approximate audio position being processed. Speaker labels are added after diarization, because the ASR stage does not yet know who is speaking.
+While WhisperX is decoding, the app displays the most recently emitted timestamped segments and the approximate audio position being processed. Speaker labels are added after diarization, because the ASR stage does not yet know who is speaking. Exact speaker counts use WhisperX's `num_speakers` control, and unmatched segments are filled from the nearest diarized speaker turn rather than silently defaulting to speaker 0.
 
 The final TXT and SRT are always written in chronological order even if internal batching processes chunks in a different order.
 
