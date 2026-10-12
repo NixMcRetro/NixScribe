@@ -1121,6 +1121,7 @@ def _backend_self_test() -> None:
     import torch
     import whisperx
     from whisperx.asr import FasterWhisperPipeline
+    from whisperx.alignment import align as alignment_impl
     from whisperx.diarize import DiarizationPipeline
 
     required = {
@@ -1129,7 +1130,7 @@ def _backend_self_test() -> None:
             {"audio", "batch_size", "chunk_size", "verbose", "progress_callback"},
         ),
         "whisperx.align": (
-            whisperx.align,
+            alignment_impl,
             {
                 "transcript",
                 "model",
