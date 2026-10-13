@@ -173,3 +173,25 @@ NixScribe accepts common audio and video containers such as WAV, M4A, MP3, FLAC,
 ## GitHub hygiene
 
 The included `.gitignore` excludes virtual environments, build output, local caches, tokens, recordings, and transcription projects. Keep private audio/transcripts and Hugging Face credentials out of the repository.
+
+## Native macOS window
+
+NixScribe launches a native Cocoa/WebKit window instead of a separate browser
+tab. Close the window, use **NixScribe > Quit NixScribe**, or click **Quit** to
+terminate the application and its local Flask server. Closing is prevented while
+transcription is underway. A second launch attempts to focus the existing window.
+
+For developer/browser mode, run `python app.py --browser`.
+The headless CI smoke test uses `WHISPERX_UI_NO_BROWSER=1`.
+
+## TXT and SRT formatting
+
+TXT now contains speaker-labelled paragraphs without timestamps, e.g.
+`[SPEAKER_00] Hello.`. Consecutive segments from the same speaker are combined
+by default; turn off that option if you want a paragraph for each segment.
+
+SRT keeps timestamps. It normally includes speaker labels, a maximum of two
+lines, 42 characters per line, and six seconds per cue. The export controls let
+you toggle SRT speaker labels and change width, line count and cue duration.
+Cue times use WhisperX word alignment when available; if alignment is incomplete,
+NixScribe preserves the original transcript text and interpolates word timing.
