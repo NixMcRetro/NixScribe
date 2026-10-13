@@ -121,6 +121,10 @@
     }
     details > summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 700; user-select: none; }
     details > summary::marker { color: var(--muted); }
+    .progress-card { position: sticky; top: 8px; z-index: 5; margin-top: 0; padding: 15px 20px; }
+    .progress-card.running { border-color: rgba(10,132,255,.24); }
+    .progress-card.running .stats { display: none; }
+    .progress-card.running .detail { margin-top: 6px; }
     .progress-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
     .phase { font-size: 18px; font-weight: 760; letter-spacing: -.2px; }
     .phase-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
@@ -183,8 +187,29 @@
         <span id="wxBadge" class="badge">WhisperX {{ whisperx_version }}</span>
         <span id="tokenBadge" class="badge {{ 'good' if hf_token_set else 'bad' }}">HF {{ 'ready' if hf_token_set else 'missing' }}</span>
       </div>
+      <button id="quitBtn" type="button" title="Quit NixScribe" style="padding:6px 12px;font-size:12px">Quit</button>
     </div>
   </header>
+
+  <section id="progressCard" class="card progress-card hidden" aria-live="polite">
+    <div class="progress-head">
+      <div>
+        <div id="phase" class="phase">Ready</div>
+        <div id="status" class="phase-sub">Choose an audio or video file to begin.</div>
+      </div>
+      <div id="overallPercent" class="percent">0.0%</div>
+    </div>
+    <div class="bar"><div id="overallBar"></div></div>
+    <div class="stage-line"><span id="stageLabel">Current stage</span><span id="stagePercent">0.0%</span></div>
+    <div class="smallbar"><div id="stageBar"></div></div>
+    <div class="stats">
+      <span id="elapsed">Elapsed 00:00:00</span>
+      <span id="speakers">Speakers —</span>
+      <span id="projectPath">Project —</span>
+    </div>
+    <div id="detail" class="detail"></div>
+  </section>
+
 
   <section class="card">
     <div class="section-title">Source</div>
@@ -283,22 +308,45 @@
   </section>
 
   <section class="card">
-    <div class="progress-head">
-      <div>
-        <div id="phase" class="phase">Ready</div>
-        <div id="status" class="phase-sub">Choose an audio or video file to begin.</div>
+    <div class="section-title">Export formatting</div>
+    <div class="grid two">
+      <div class="checkline" style="margin-top:0">
+        <input id="txtGroupTurns" type="checkbox" checked>
+        <label for="txtGroupTurns">Group nearby speech by speaker (long turns still split into paragraphs)</label>
       </div>
-      <div id="overallPercent" class="percent">0.0%</div>
+      <div class="checkline" style="margin-top:0">
+        <input id="srtSpeakerLabels" type="checkbox" checked>
+        <label for="srtSpeakerLabels">Keep speaker labels in SRT subtitles</label>
+      </div>
     </div>
-    <div class="bar"><div id="overallBar"></div></div>
-    <div class="stage-line"><span id="stageLabel">Current stage</span><span id="stagePercent">0.0%</span></div>
-    <div class="smallbar"><div id="stageBar"></div></div>
-    <div class="stats">
-      <span id="elapsed">Elapsed 00:00:00</span>
-      <span id="speakers">Speakers —</span>
-      <span id="projectPath">Project —</span>
+    <div class="grid" style="margin-top:16px">
+      <div>
+        <label for="srtWidth">Characters per subtitle line</label>
+        <select id="srtWidth">
+          <option value="32">32 (compact)</option>
+          <option value="37">37 (broadcast)</option>
+          <option value="42" selected>42 (standard)</option>
+          <option value="48">48 (wide)</option>
+        </select>
+      </div>
+      <div>
+        <label for="srtLines">Lines per subtitle</label>
+        <select id="srtLines">
+          <option value="1">1 line</option>
+          <option value="2" selected>2 lines</option>
+        </select>
+      </div>
+      <div>
+        <label for="srtDuration">Maximum subtitle duration</label>
+        <select id="srtDuration">
+          <option value="3">3 seconds</option>
+          <option value="4">4 seconds</option>
+          <option value="6" selected>6 seconds</option>
+          <option value="8">8 seconds</option>
+        </select>
+      </div>
     </div>
-    <div id="detail" class="detail"></div>
+    <div class="hint">TXT has speaker labels, no timestamps, and readable paragraph breaks. SRT keeps timestamps and is split into shorter cues. Enabling speaker labels reduces the available text width.</div>
   </section>
 
   <section id="errorCard" class="card error-card hidden">
@@ -351,6 +399,8 @@
 
 <script>
 const $ = id => document.getElementById(id);
+let startingJob = false;
+let lastJobStatus = 'Idle';
 
 function fmtTime(seconds) {
   seconds = Math.max(0, Math.floor(Number(seconds || 0)));
@@ -476,6 +526,15 @@ async function poll() {
     const s = await jsonFetch('/api/status');
     const op = Number(s.overall_percent || 0);
     const sp = Number(s.stage_percent || 0);
+    const status = s.status || 'Idle';
+
+    if (status !== lastJobStatus && (s.running || status === 'Complete' || status === 'Cancelled')) {
+      $('formError').textContent = '';
+    }
+    lastJobStatus = status;
+    const progress = $('progressCard');
+    progress.classList.toggle('hidden', status === 'Idle' && !s.running);
+    progress.classList.toggle('running', !!s.running);
 
     $('phase').textContent = s.stage === 'Idle' ? 'Ready' : (s.stage || 'Ready');
     $('status').textContent = s.status === 'Idle' ? 'Choose an audio or video file to begin.' : (s.status || '');
@@ -501,8 +560,9 @@ async function poll() {
 
     $('log').textContent = (s.log && s.log.length) ? s.log.join('\n') : 'Waiting.';
     $('log').scrollTop = $('log').scrollHeight;
-    $('startBtn').disabled = !!s.running;
+    $('startBtn').disabled = !!s.running || startingJob;
     $('cancelBtn').disabled = !s.running;
+    $('quitBtn').disabled = !!s.running;
 
     $('wxBadge').textContent = `WhisperX ${s.whisperx_version || 'not installed'}`;
     $('tokenBadge').textContent = `HF ${s.hf_token_set ? 'ready' : 'missing'}`;
@@ -559,6 +619,9 @@ $('recentFiles').addEventListener('change', e => {
 $('inputFile').addEventListener('input', updateSourceSummary);
 
 $('startBtn').addEventListener('click', async () => {
+  if (startingJob || $('startBtn').disabled) return;
+  startingJob = true;
+  $('startBtn').disabled = true;
   $('formError').textContent = '';
   const payload = {
     input_file: $('inputFile').value.trim(),
@@ -568,6 +631,11 @@ $('startBtn').addEventListener('click', async () => {
     compute_type: $('computeType').value,
     batch_size: Number($('batchSize').value),
     speaker_count: $('speakerCount').value,
+    txt_group_turns: $('txtGroupTurns').checked,
+    srt_speaker_labels: $('srtSpeakerLabels').checked,
+    srt_chars_per_line: Number($('srtWidth').value),
+    srt_max_lines: Number($('srtLines').value),
+    srt_max_duration: Number($('srtDuration').value),
     initial_prompt: $('initialPrompt').value.trim(),
     hotwords: $('hotwords').value.trim(),
   };
@@ -577,8 +645,28 @@ $('startBtn').addEventListener('click', async () => {
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });
+    $('progressCard').classList.remove('hidden');
+    $('progressCard').scrollIntoView({behavior:'smooth', block:'start'});
     await poll();
-  } catch (e) { $('formError').textContent = e.message; }
+  } catch (e) {
+    if (/transcription is already running/i.test(e.message)) {
+      $('formError').textContent = '';
+      await poll();
+    } else {
+      $('formError').textContent = e.message;
+    }
+  } finally {
+    startingJob = false;
+    await poll();
+  }
+});
+
+$('quitBtn').addEventListener('click', async () => {
+  try {
+    await jsonFetch('/api/quit', {method:'POST'});
+  } catch (e) {
+    $('formError').textContent = e.message;
+  }
 });
 
 $('cancelBtn').addEventListener('click', async () => {

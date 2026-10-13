@@ -45,6 +45,9 @@ source "$BUILD_VENV/bin/activate"
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -r requirements-build.txt
 
+# Generate native multi-resolution Dock icon before PyInstaller collects it.
+python assets/make_icon.py
+
 export WHISPERX_BUNDLED_FFMPEG="$FFMPEG"
 export WHISPERX_BUNDLED_FFPROBE="$FFPROBE"
 

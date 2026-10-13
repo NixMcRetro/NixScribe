@@ -30,6 +30,7 @@ collect_packages = [
     "pyannote.core",
     "pyannote.database",
     "pyannote.metrics",
+    "webview",
 ]
 
 for package in collect_packages:
@@ -92,6 +93,17 @@ def unique(items):
 
 binaries = unique(binaries)
 datas = unique(datas)
+hiddenimports += [
+    "webview.platforms.cocoa",
+    "webview.menu",
+    "objc",
+    "AppKit",
+    "Foundation",
+    "Cocoa",
+    "WebKit",
+    "Quartz",
+    "Security",
+]
 hiddenimports = sorted(set(hiddenimports))
 
 a = Analysis(
@@ -144,7 +156,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="NixScribe.app",
-    icon=None,
+    icon=str(project / "assets" / "NixScribe.icns"),
     bundle_identifier="com.nixmcretro.nixscribe",
     info_plist={
         "CFBundleDisplayName": "NixScribe",
@@ -153,5 +165,6 @@ app = BUNDLE(
         "CFBundleVersion": "1",
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
+        "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},
     },
 )
