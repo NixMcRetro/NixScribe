@@ -23,20 +23,69 @@ def _speaker(segment: dict[str, Any]) -> str:
     return str(segment.get("speaker") or "UNKNOWN")
 
 
+def _readable_paragraphs(text: str) -> list[str]:
+    """Break long speech into paragraphs without rewriting or omitting any words.
+
+    Aim for several sentences per paragraph. Prefer sentence punctuation after
+    45 words, softer clause boundaries after 70, and a hard limit of 90 words
+    or roughly 600 characters for punctuation-free speech.
+    """
+    words = text.split()
+    output: list[str] = []
+    current: list[str] = []
+    chars = 0
+
+    for word in words:
+        current.append(word)
+        chars += len(word) + (1 if len(current) > 1 else 0)
+        count = len(current)
+        ending = word.rstrip('"\'’”)]}')
+        sentence_end = ending.endswith((".", "!", "?"))
+        clause_end = ending.endswith((",", ";", ":"))
+        if (
+            (count >= 45 and sentence_end)
+            or (count >= 70 and clause_end)
+            or count >= 90
+            or chars >= 600
+        ):
+            output.append(" ".join(current))
+            current = []
+            chars = 0
+
+    if current:
+        output.append(" ".join(current))
+    return output
+
+
 def write_txt(result: dict[str, Any], audio_path: Path, output_dir: Path,
               *, group_turns: bool = True) -> Path:
-    """Speaker-labelled paragraphs without timestamps."""
+    """Timestamp-free speaker paragraphs with natural readability breaks."""
     turns: list[tuple[str, str]] = []
+    last_end: float | None = None
     for seg in _segments(result):
         txt = " ".join(str(seg.get("text") or "").split())
         if not txt:
             continue
         speaker = _speaker(seg)
-        if group_turns and turns and turns[-1][0] == speaker:
+        seg_start = _safe_time(seg.get("start"), -1.0)
+        long_pause = (
+            last_end is not None and seg_start >= 0
+            and seg_start - last_end >= 2.5
+        )
+        if group_turns and turns and turns[-1][0] == speaker and not long_pause:
             turns[-1] = (speaker, turns[-1][1] + " " + txt)
         else:
             turns.append((speaker, txt))
-    body = "\n\n".join(f"[{speaker}] {text}" for speaker, text in turns)
+        last_end = _safe_time(seg.get("end"), -1.0)
+        if last_end < 0:
+            last_end = None
+
+    paragraphs = [
+        f"[{speaker}] {paragraph}"
+        for speaker, text in turns
+        for paragraph in _readable_paragraphs(text)
+    ]
+    body = "\n\n".join(paragraphs)
     dest = output_dir / f"{audio_path.stem}.txt"
     dest.write_text(body + ("\n" if body else ""), encoding="utf-8")
     return dest
