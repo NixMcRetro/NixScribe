@@ -101,6 +101,22 @@ def _lines(words: list[TimedWord], speaker: str, include_speakers: bool, width: 
                          break_on_hyphens=False, replace_whitespace=False)
 
 
+def _fragment_long_word(word: TimedWord, speaker: str, include_speakers: bool,
+                        width: int) -> list[TimedWord]:
+    """Split exceptionally long tokens without losing characters or word timing."""
+    prefix = len(speaker) + 2 if include_speakers else 0
+    available = max(1, width - prefix)
+    if len(word.text) <= available:
+        return [word]
+    fragments = []
+    for offset in range(0, len(word.text), available):
+        ending = min(offset + available, len(word.text))
+        start = word.start + (word.end - word.start) * offset / len(word.text)
+        end = word.start + (word.end - word.start) * ending / len(word.text)
+        fragments.append(TimedWord(word.text[offset:ending], start, end))
+    return fragments
+
+
 def write_srt(result: dict[str, Any], audio_path: Path, output_dir: Path,
               *, include_speakers: bool = True, chars_per_line: int = 42,
               max_lines: int = 2, max_duration: float = 6.0) -> Path:
@@ -123,7 +139,8 @@ def write_srt(result: dict[str, Any], audio_path: Path, output_dir: Path,
             cues.append((start, end, _lines(current, speaker, include_speakers, chars_per_line)))
             current.clear()
 
-        for word in _words(seg):
+        for word in (part for original in _words(seg)
+                     for part in _fragment_long_word(original, speaker, include_speakers, chars_per_line)):
             trial = current + [word]
             too_long = bool(current and word.end - current[0].start > max_duration)
             too_wide = bool(current and len(_lines(trial, speaker, include_speakers, chars_per_line)) > max_lines)
