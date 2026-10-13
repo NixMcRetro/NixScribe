@@ -30,6 +30,35 @@ class TranscriptExportTests(unittest.TestCase):
         self.assertIn("[SPEAKER_01]", text)
         self.assertIn("[UNKNOWN]", text)
 
+    def test_long_speaker_turn_is_split_into_readable_paragraphs(self):
+        # A single long WhisperX segment must not turn into a giant paragraph.
+        sentence = "The explanation continues through another detailed step of this technical discussion."
+        speech = " ".join([sentence] * 32)
+        data = {"segments": [{
+            "speaker": "SPEAKER_01", "start": 1.0, "end": 210.0,
+            "text": speech,
+        }]}
+        txt = write_txt(data, self.media, self.dest).read_text()
+        paragraphs = [p for p in txt.strip().split("\n\n") if p]
+        self.assertGreaterEqual(len(paragraphs), 4)
+        self.assertTrue(all(p.startswith("[SPEAKER_01] ") for p in paragraphs))
+        self.assertTrue(all(len(p.split()) <= 91 for p in paragraphs))
+        self.assertEqual(
+            " ".join(p.removeprefix("[SPEAKER_01] ") for p in paragraphs),
+            speech,
+        )
+        self.assertNotIn("-->", txt)
+
+    def test_long_silence_starts_new_paragraph_with_same_speaker(self):
+        data = {"segments": [
+            {"speaker": "SPEAKER_01", "start": 0.0, "end": 1.0,
+             "text": "First thought."},
+            {"speaker": "SPEAKER_01", "start": 7.0, "end": 8.0,
+             "text": "Next topic."},
+        ]}
+        txt = write_txt(data, self.media, self.dest).read_text()
+        self.assertEqual(txt.count("[SPEAKER_01]"), 2)
+
     def test_txt_no_grouping(self):
         text = write_txt(self.data, self.media, self.dest,
                          group_turns=False).read_text()
