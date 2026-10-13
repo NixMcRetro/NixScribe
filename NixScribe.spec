@@ -165,5 +165,6 @@ app = BUNDLE(
         "CFBundleVersion": "1",
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
+        "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},
     },
 )
