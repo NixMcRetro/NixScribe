@@ -30,6 +30,7 @@ collect_packages = [
     "pyannote.core",
     "pyannote.database",
     "pyannote.metrics",
+    "webview",
 ]
 
 for package in collect_packages:
@@ -92,6 +93,17 @@ def unique(items):
 
 binaries = unique(binaries)
 datas = unique(datas)
+hiddenimports += [
+    "webview.platforms.cocoa",
+    "webview.menu",
+    "objc",
+    "AppKit",
+    "Foundation",
+    "Cocoa",
+    "WebKit",
+    "Quartz",
+    "Security",
+]
 hiddenimports = sorted(set(hiddenimports))
 
 a = Analysis(
