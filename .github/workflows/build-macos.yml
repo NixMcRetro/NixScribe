@@ -43,6 +43,8 @@ jobs:
           file "dist/NixScribe.app/Contents/MacOS/NixScribe"
           file "dist/NixScribe.app/Contents/MacOS/NixScribe" | grep -q "arm64"
           /usr/bin/codesign --verify --deep --strict --verbose=2 "dist/NixScribe.app"
+          test -s "dist/NixScribe.app/Contents/Resources/NixScribe.icns"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "dist/NixScribe.app/Contents/Info.plist" | grep -q "NixScribe.icns"
 
       - name: Verify packaged ML backend API
         run: |
