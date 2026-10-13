@@ -183,6 +183,7 @@
         <span id="wxBadge" class="badge">WhisperX {{ whisperx_version }}</span>
         <span id="tokenBadge" class="badge {{ 'good' if hf_token_set else 'bad' }}">HF {{ 'ready' if hf_token_set else 'missing' }}</span>
       </div>
+      <button id="quitBtn" type="button" title="Quit NixScribe" style="padding:6px 12px;font-size:12px">Quit</button>
     </div>
   </header>
 
@@ -280,6 +281,48 @@
       <button id="cancelBtn" class="cancel" disabled>Cancel</button>
     </div>
     <div id="formError" class="form-error"></div>
+  </section>
+
+  <section class="card">
+    <div class="section-title">Export formatting</div>
+    <div class="grid two">
+      <div class="checkline" style="margin-top:0">
+        <input id="txtGroupTurns" type="checkbox" checked>
+        <label for="txtGroupTurns">Combine consecutive TXT paragraphs by speaker</label>
+      </div>
+      <div class="checkline" style="margin-top:0">
+        <input id="srtSpeakerLabels" type="checkbox" checked>
+        <label for="srtSpeakerLabels">Keep speaker labels in SRT subtitles</label>
+      </div>
+    </div>
+    <div class="grid" style="margin-top:16px">
+      <div>
+        <label for="srtWidth">Characters per subtitle line</label>
+        <select id="srtWidth">
+          <option value="32">32 (compact)</option>
+          <option value="37">37 (broadcast)</option>
+          <option value="42" selected>42 (standard)</option>
+          <option value="48">48 (wide)</option>
+        </select>
+      </div>
+      <div>
+        <label for="srtLines">Lines per subtitle</label>
+        <select id="srtLines">
+          <option value="1">1 line</option>
+          <option value="2" selected>2 lines</option>
+        </select>
+      </div>
+      <div>
+        <label for="srtDuration">Maximum subtitle duration</label>
+        <select id="srtDuration">
+          <option value="3">3 seconds</option>
+          <option value="4">4 seconds</option>
+          <option value="6" selected>6 seconds</option>
+          <option value="8">8 seconds</option>
+        </select>
+      </div>
+    </div>
+    <div class="hint">TXT always uses speaker labels with no timestamps. SRT keeps timestamps and is split into shorter cues. Enabling speaker labels reduces the available text width.</div>
   </section>
 
   <section class="card">
@@ -503,6 +546,7 @@ async function poll() {
     $('log').scrollTop = $('log').scrollHeight;
     $('startBtn').disabled = !!s.running;
     $('cancelBtn').disabled = !s.running;
+    $('quitBtn').disabled = !!s.running;
 
     $('wxBadge').textContent = `WhisperX ${s.whisperx_version || 'not installed'}`;
     $('tokenBadge').textContent = `HF ${s.hf_token_set ? 'ready' : 'missing'}`;
@@ -568,6 +612,11 @@ $('startBtn').addEventListener('click', async () => {
     compute_type: $('computeType').value,
     batch_size: Number($('batchSize').value),
     speaker_count: $('speakerCount').value,
+    txt_group_turns: $('txtGroupTurns').checked,
+    srt_speaker_labels: $('srtSpeakerLabels').checked,
+    srt_chars_per_line: Number($('srtWidth').value),
+    srt_max_lines: Number($('srtLines').value),
+    srt_max_duration: Number($('srtDuration').value),
     initial_prompt: $('initialPrompt').value.trim(),
     hotwords: $('hotwords').value.trim(),
   };
@@ -579,6 +628,14 @@ $('startBtn').addEventListener('click', async () => {
     });
     await poll();
   } catch (e) { $('formError').textContent = e.message; }
+});
+
+$('quitBtn').addEventListener('click', async () => {
+  try {
+    await jsonFetch('/api/quit', {method:'POST'});
+  } catch (e) {
+    $('formError').textContent = e.message;
+  }
 });
 
 $('cancelBtn').addEventListener('click', async () => {
