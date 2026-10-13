@@ -30,6 +30,9 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
 
+      - name: Test TXT and SRT formatters
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
       - name: Build NixScribe
         run: |
           chmod +x build_macos_app.sh
@@ -44,6 +47,10 @@ jobs:
       - name: Verify packaged ML backend API
         run: |
           "dist/NixScribe.app/Contents/MacOS/NixScribe" --self-test-backend
+
+      - name: Verify frozen native macOS imports
+        run: |
+          "dist/NixScribe.app/Contents/MacOS/NixScribe" --self-test-native
 
       - name: Smoke-test frozen app
         shell: bash
