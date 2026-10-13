@@ -76,6 +76,23 @@ class TranscriptExportTests(unittest.TestCase):
         self.assertIn("00:00:05,000 --> 00:00:05,400", srt)
         self.assertIn("00:00:06,500 --> 00:00:06,900", srt)
 
+    def test_unbroken_long_token_respects_limits(self):
+        token = "https://" + "a" * 110 + ".example"
+        data = {"segments": [{"speaker": "SPEAKER_00",
+                              "start": 0.0, "end": 12.0, "text": token}]}
+        srt = write_srt(data, self.media, self.dest,
+                        include_speakers=True, chars_per_line=32,
+                        max_lines=2, max_duration=4.0).read_text()
+        pieces = []
+        for block in srt.strip().split("\n\n"):
+            lines = block.splitlines()[2:]
+            self.assertLessEqual(len(lines), 2)
+            for line in lines:
+                self.assertLessEqual(len(line), 32)
+            pieces.append("".join(line.replace("SPEAKER_00: ", "")
+                                  for line in lines))
+        self.assertEqual("".join(pieces), token)
+
     def test_missing_aligned_word_preserves_original(self):
         data = {"segments": [{
             "speaker": None, "start": 0, "end": 2, "text": "hello, world!",
