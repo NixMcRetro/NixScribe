@@ -156,7 +156,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="NixScribe.app",
-    icon=None,
+    icon=str(project / "assets" / "NixScribe.icns"),
     bundle_identifier="com.nixmcretro.nixscribe",
     info_plist={
         "CFBundleDisplayName": "NixScribe",
