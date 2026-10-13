@@ -195,3 +195,19 @@ lines, 42 characters per line, and six seconds per cue. The export controls let
 you toggle SRT speaker labels and change width, line count and cue duration.
 Cue times use WhisperX word alignment when available; if alignment is incomplete,
 NixScribe preserves the original transcript text and interpolates word timing.
+
+## Readable paragraphs, progress, and Dock icon
+
+Long uninterrupted speaker turns are now separated into readable multi-sentence
+paragraphs in TXT output without dropping text or timestamps from SRT.
+A speaker label starts each TXT paragraph. A silence of at least 2.5 seconds
+also breaks a paragraph.
+
+The progress card moves to the top of the window when a job begins and stays
+visible while processing. A duplicate Start click no longer leaves a persistent
+error banner: the button is disabled immediately while the first request is
+pending, and transient messages clear when the job advances.
+
+A custom blue waveform icon is generated reproducibly from
+`assets/make_icon.py` as both PNG and multi-resolution macOS ICNS during the
+normal build. The ICNS is embedded in the signed `.app`.
