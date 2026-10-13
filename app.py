@@ -16,7 +16,7 @@ import time
 import traceback
 import webbrowser
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
 
@@ -78,6 +78,7 @@ MIN_WHISPERX = (3, 8, 4)
 
 app = Flask(__name__, template_folder=str(RESOURCE_ROOT / "templates"))
 state_lock = threading.RLock()
+NATIVE_QUIT: Callable[[], None] | None = None
 
 STATE: dict[str, Any] = {
     "running": False,
@@ -331,21 +332,12 @@ def _speaker_label(seg: dict[str, Any]) -> str:
     return str(seg.get("speaker") or "UNKNOWN")
 
 
-def _write_txt(result: dict[str, Any], audio_path: Path, output_dir: Path) -> Path:
-    """Write a readable line-by-line transcript with timestamps and speaker labels."""
-    output_path = output_dir / f"{audio_path.stem}.txt"
-    lines: list[str] = []
-    for seg in result.get("segments", []):
-        text = str(seg.get("text", "")).strip()
-        if not text:
-            continue
-        speaker = _speaker_label(seg)
-        start = _fmt_ts(seg.get("start"))
-        end = _fmt_ts(seg.get("end"))
-        lines.append(f"[{start} --> {end}] {speaker}: {text}")
-    output_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-    return output_path
-
+def _write_txt(
+    result: dict[str, Any], audio_path: Path, output_dir: Path, *,
+    group_turns: bool = True,
+) -> Path:
+    from transcript_format import write_txt
+    return write_txt(result, audio_path, output_dir, group_turns=group_turns)
 
 def _fmt_srt_ts(seconds: float | None) -> str:
     if seconds is None:
@@ -357,23 +349,21 @@ def _fmt_srt_ts(seconds: float | None) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
 
-def _write_srt(result: dict[str, Any], audio_path: Path, output_dir: Path) -> Path:
-    """Write an SRT subtitle file with a speaker label in every cue."""
-    output_path = output_dir / f"{audio_path.stem}.srt"
-    blocks: list[str] = []
-    cue = 1
-    for seg in result.get("segments", []):
-        text = str(seg.get("text", "")).strip()
-        if not text:
-            continue
-        speaker = _speaker_label(seg)
-        start = _fmt_srt_ts(seg.get("start"))
-        end = _fmt_srt_ts(seg.get("end"))
-        blocks.append(f"{cue}\n{start} --> {end}\n{speaker}: {text}")
-        cue += 1
-    output_path.write_text("\n\n".join(blocks) + ("\n" if blocks else ""), encoding="utf-8")
-    return output_path
-
+def _write_srt(
+    result: dict[str, Any], audio_path: Path, output_dir: Path, *,
+    include_speakers: bool = True,
+    chars_per_line: int = 42,
+    max_lines: int = 2,
+    max_duration: float = 6.0,
+) -> Path:
+    from transcript_format import write_srt
+    return write_srt(
+        result, audio_path, output_dir,
+        include_speakers=include_speakers,
+        chars_per_line=chars_per_line,
+        max_lines=max_lines,
+        max_duration=max_duration,
+    )
 
 def _torch_cleanup(torch_module: Any = None) -> None:
     gc.collect()
@@ -819,9 +809,18 @@ def _run_job(config: dict[str, Any]) -> None:
             overall_percent=97.3,
         )
         result["language"] = "en"
-        txt_path = _write_txt(result, input_path, project_dir)
+        txt_path = _write_txt(
+            result, input_path, project_dir,
+            group_turns=config["txt_group_turns"],
+        )
         _update(stage_percent=55.0, overall_percent=98.5)
-        srt_path = _write_srt(result, input_path, project_dir)
+        srt_path = _write_srt(
+            result, input_path, project_dir,
+            include_speakers=config["srt_speaker_labels"],
+            chars_per_line=config["srt_chars_per_line"],
+            max_lines=config["srt_max_lines"],
+            max_duration=config["srt_max_duration"],
+        )
         _update(stage_percent=85.0, overall_percent=99.2)
 
         output_files = [str(txt_path), str(srt_path)]
@@ -1030,6 +1029,19 @@ def start_job():
     except ValueError:
         return jsonify({"ok": False, "error": "Speaker count must be Auto or a number from 1 to 10."}), 400
 
+    try:
+        srt_width = int(payload.get("srt_chars_per_line", 42))
+        srt_lines = int(payload.get("srt_max_lines", 2))
+        srt_duration = float(payload.get("srt_max_duration", 6))
+    except (ValueError, TypeError):
+        return jsonify({"ok": False, "error": "Invalid subtitle formatting options."}), 400
+    if (
+        srt_width not in (32, 37, 42, 48)
+        or srt_lines not in (1, 2)
+        or srt_duration not in (3.0, 4.0, 6.0, 8.0)
+    ):
+        return jsonify({"ok": False, "error": "Unsupported subtitle formatting options."}), 400
+
     config = {
         "input_file": input_file,
         "projects_dir": projects_dir,
@@ -1039,6 +1051,11 @@ def start_job():
         "batch_size": max(1, min(16, int(payload.get("batch_size", 4)))),
         "threads": max(0, min(32, int(payload.get("threads", 0)))),
         "speaker_count": speaker_count,
+        "txt_group_turns": payload.get("txt_group_turns", True) is True,
+        "srt_speaker_labels": payload.get("srt_speaker_labels", True) is True,
+        "srt_chars_per_line": srt_width,
+        "srt_max_lines": srt_lines,
+        "srt_max_duration": srt_duration,
         "initial_prompt": str(payload.get("initial_prompt", "")).strip(),
         "hotwords": str(payload.get("hotwords", "")).strip(),
     }
@@ -1072,6 +1089,25 @@ def start_job():
         settings=config,
     )
     threading.Thread(target=_run_job, args=(config,), daemon=True).start()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/quit")
+def quit_app():
+    """Request native app shutdown without interrupting running jobs."""
+    with state_lock:
+        if STATE.get("running"):
+            return jsonify({
+                "ok": False,
+                "error": "Finish or cancel the transcription before quitting.",
+            }), 409
+        callback = NATIVE_QUIT
+    if callback is None:
+        return jsonify({
+            "ok": False,
+            "error": "Native Quit is not available in browser/test mode.",
+        }), 409
+    callback()
     return jsonify({"ok": True})
 
 
@@ -1174,9 +1210,33 @@ if __name__ == "__main__":
     if "--self-test-backend" in sys.argv:
         _backend_self_test()
         raise SystemExit(0)
+    if "--self-test-native" in sys.argv:
+        import webview
+        import objc
+        import Cocoa
+        import WebKit
+        from native_app import run_native
+        assert callable(run_native) and hasattr(webview, "create_window")
+        print("Native macOS WebKit backend imports OK")
+        raise SystemExit(0)
 
     print(f"{APP_NAME}: http://{APP_HOST}:{APP_PORT}")
     print(f"Work directory: {DEFAULT_WORKDIR}")
-    if os.environ.get("WHISPERX_UI_NO_BROWSER") != "1":
-        threading.Timer(0.8, _open_browser).start()
-    app.run(host=APP_HOST, port=APP_PORT, debug=False, threaded=True, use_reloader=False)
+
+    if os.environ.get("WHISPERX_UI_NO_BROWSER") == "1" or "--browser" in sys.argv or sys.platform != "darwin":
+        if os.environ.get("WHISPERX_UI_NO_BROWSER") != "1":
+            threading.Timer(0.8, _open_browser).start()
+        app.run(host=APP_HOST, port=APP_PORT, debug=False, threaded=True, use_reloader=False)
+    else:
+        from native_app import run_native
+
+        def is_running() -> bool:
+            with state_lock:
+                return bool(STATE.get("running"))
+
+        def register_quit(callback: Callable[[], None] | None) -> None:
+            global NATIVE_QUIT
+            with state_lock:
+                NATIVE_QUIT = callback
+
+        run_native(app, APP_HOST, APP_PORT, is_running, register_quit)
