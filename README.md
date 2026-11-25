@@ -267,8 +267,18 @@ by default; turn off that option if you want a paragraph for each segment.
 SRT keeps timestamps. It normally includes speaker labels, a maximum of two
 lines, 42 characters per line, and six seconds per cue. The export controls let
 you toggle SRT speaker labels and change width, line count and cue duration.
-Cue times use WhisperX word alignment when available; if alignment is incomplete,
-NixScribe preserves the original transcript text and interpolates word timing.
+Both exports and the final preview split recognition segments at actual
+word-level speaker changes, rather than applying one dominant speaker to
+every word. When word-level labels exist but a token has no matching label,
+it is marked UNKNOWN instead of inventing an assignment. Original recognized
+words, spelling and punctuation are retained. Valid aligned word times are
+preserved; missing runs are interpolated between known boundaries.
+
+SRT can join nearby same-speaker phrases across ASR segment boundaries.
+Short cues prefer at least one second of reading time and roughly 20 spoken
+characters per second, extending only into available silence (maximum 750 ms
+of padding). Speaker boundaries, configured width/duration limits and the
+audio end take precedence. Very fast dialogue can still produce short cues.
 
 ## Readable paragraphs, progress, and Dock icon
 

@@ -839,20 +839,23 @@ def _run_job(config: dict[str, Any]) -> None:
             _torch_cleanup(torch)
             _cancel_if_requested()
 
-            speakers = sorted(
-                {
-                    seg.get("speaker")
-                    for seg in result.get("segments", [])
-                    if seg.get("speaker") is not None
-                }
-            )
+            from transcript_format import speaker_segments
+            speakers = sorted({
+                seg["speaker"] for seg in speaker_segments(result)
+                if seg["speaker"] != "UNKNOWN"
+            })
             _append_log(
                 f"Diarization finished: {len(speakers)} speaker label(s): "
                 f"{', '.join(speakers) or 'none'}"
             )
 
+        from transcript_format import speaker_segments
+        export_turns = speaker_segments(result)
+        result["audio_duration"] = len(audio) / 16000.0
+        _append_log(f"Export speaker turns: {len(export_turns)}; "
+                    f"unknown-label turns: {sum(t['speaker'] == 'UNKNOWN' for t in export_turns)}")
         _update(
-            live_preview=_final_preview_from_segments(result.get("segments", [])),
+            live_preview=_final_preview_from_segments(export_turns),
             live_position="Speaker assignment complete; writing TXT and SRT…",
         )
 
