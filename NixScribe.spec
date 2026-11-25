@@ -2,11 +2,13 @@
 """PyInstaller spec for the self-contained Apple-silicon macOS app."""
 
 import os
+import runpy
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
 
 project = Path(os.getcwd()).resolve()
+version = runpy.run_path(str(project / "app_config.py"))["VERSION"]
 ffmpeg = os.environ.get("WHISPERX_BUNDLED_FFMPEG")
 ffprobe = os.environ.get("WHISPERX_BUNDLED_FFPROBE")
 if not ffmpeg:
@@ -30,6 +32,7 @@ collect_packages = [
     "pyannote.core",
     "pyannote.database",
     "pyannote.metrics",
+    "webview",
 ]
 
 for package in collect_packages:
@@ -92,6 +95,17 @@ def unique(items):
 
 binaries = unique(binaries)
 datas = unique(datas)
+hiddenimports += [
+    "webview.platforms.cocoa",
+    "webview.menu",
+    "objc",
+    "AppKit",
+    "Foundation",
+    "Cocoa",
+    "WebKit",
+    "Quartz",
+    "Security",
+]
 hiddenimports = sorted(set(hiddenimports))
 
 a = Analysis(
@@ -144,14 +158,15 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="NixScribe.app",
-    icon=None,
+    icon=str(project / "assets" / "NixScribe.icns"),
     bundle_identifier="com.nixmcretro.nixscribe",
     info_plist={
         "CFBundleDisplayName": "NixScribe",
         "CFBundleName": "NixScribe",
-        "CFBundleShortVersionString": "0.1.0",
-        "CFBundleVersion": "1",
+        "CFBundleShortVersionString": version,
+        "CFBundleVersion": version,
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
+        "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},
     },
 )

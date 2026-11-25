@@ -50,14 +50,20 @@
         var(--bg);
       color: var(--text);
     }
-    .shell { width: min(100% - 32px, 980px); margin: 34px auto 70px; }
-    .topbar {
-      display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
-      padding: 4px 4px 18px;
+    .shell { width: min(100% - 32px, 980px); margin: 16px auto 70px; }
+    /* Keep branding, status and progress in one sticky group. The rest of the
+       document scrolls beneath it; no fixed-height offsets are needed. */
+    .pinned-header {
+      position: sticky; top: 0; z-index: 20; width: 100%;
+      background: var(--surface-strong); border-bottom: 1px solid var(--line);
     }
-    h1 { margin: 0; font-size: 32px; letter-spacing: -.65px; line-height: 1.05; }
-    .subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
-    .status-stack { display: flex; align-items: flex-end; flex-direction: column; gap: 8px; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      width: 100%; padding: 12px 16px;
+    }
+    h1 { margin: 0; font-size: 24px; letter-spacing: -.45px; line-height: 1.12; }
+    .subtitle { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .status-stack { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
     .status-pill {
       display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line);
       background: var(--surface); border-radius: 999px; padding: 7px 11px; font-size: 12px;
@@ -121,17 +127,36 @@
     }
     details > summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 700; user-select: none; }
     details > summary::marker { color: var(--muted); }
-    .progress-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
-    .phase { font-size: 18px; font-weight: 760; letter-spacing: -.2px; }
-    .phase-sub { color: var(--muted); font-size: 12px; margin-top: 3px; }
-    .percent { font-size: 26px; line-height: 1; font-weight: 760; font-variant-numeric: tabular-nums; }
-    .bar { height: 12px; margin: 14px 0 8px; background: var(--surface-soft); border-radius: 999px; overflow: hidden; }
-    .bar > div { height: 100%; width: 0; border-radius: inherit; background: var(--accent); transition: width .3s ease; }
-    .stage-line { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }
-    .smallbar { height: 4px; margin-top: 6px; background: var(--surface-soft); border-radius: 999px; overflow: hidden; }
-    .smallbar > div { height: 100%; width: 0; background: rgba(10,132,255,.65); }
-    .stats { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 13px; color: var(--muted); font-size: 12px; }
-    .detail { min-height: 18px; margin-top: 10px; color: var(--muted); font-size: 13px; }
+    /* The strip shares the header's sticky position and spans the window. */
+    .progress-strip {
+      width: 100%; margin: 0; padding: 0;
+    }
+    .progress-strip .bar {
+      width: 100%; height: 6px; margin: 0;
+      background: var(--surface-soft); overflow: hidden;
+    }
+    .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
+    .progress-strip.complete .bar > div { background: var(--good); }
+    .progress-strip.failed .bar > div { background: var(--bad); }
+    .progress-body { padding: 9px 16px 10px; }
+    .progress-head { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+    .phase { font-size: 14px; font-weight: 760; }
+    .phase-sub { color: var(--muted); font-size: 12px; }
+    .percent { font-size: 15px; font-weight: 760; font-variant-numeric: tabular-nums; }
+    .progress-meta { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 12px; }
+    .stage-line { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; }
+    .smallbar { width: 58px; height: 3px; background: var(--surface-soft); border-radius: 2px; overflow: hidden; }
+    .smallbar > span { display: block; height: 100%; width: 0; background: var(--accent); }
+    .stats { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+    .progress-strip.running .stats { display: none; }
+    .detail { margin-top: 4px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .model-repository { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; user-select: text; }
+    @media (max-width: 600px) {
+      .progress-body { padding: 8px 12px; }
+      .progress-head { align-items: flex-start; }
+      .progress-meta { gap: 4px 8px; }
+      .stage-line { display: none; }
+    }
     .live {
       min-height: 200px; max-height: 430px; overflow: auto; margin-top: 12px; padding: 15px;
       border: 1px solid var(--line); border-radius: 14px; background: var(--surface-soft);
@@ -159,9 +184,9 @@
     .hidden { display: none !important; }
     .form-error { color: var(--bad); text-align: center; margin-top: 9px; font-size: 12px; font-weight: 650; }
     @media (max-width: 760px) {
-      .shell { width: min(100% - 20px, 980px); margin-top: 20px; }
-      .topbar { flex-direction: column; }
-      .status-stack { align-items: flex-start; }
+      .shell { width: min(100% - 20px, 980px); margin-top: 12px; }
+      .topbar { flex-wrap: wrap; padding: 10px 12px; }
+      .status-stack { justify-content: flex-start; }
       .microbadges { justify-content: flex-start; }
       .grid, .grid.two { grid-template-columns: 1fr; }
       .path-row, .source-box { grid-template-columns: 1fr; }
@@ -171,10 +196,10 @@
   </style>
 </head>
 <body>
-<div class="shell">
+<div class="pinned-header">
   <header class="topbar">
     <div>
-      <h1>NixScribe</h1>
+      <h1>NixScribe <span style="font-size:12px;font-weight:400;color:var(--muted)">v{{ app_version }}</span></h1>
       <div class="subtitle">Local transcription for macOS</div>
     </div>
     <div class="status-stack">
@@ -183,9 +208,32 @@
         <span id="wxBadge" class="badge">WhisperX {{ whisperx_version }}</span>
         <span id="tokenBadge" class="badge {{ 'good' if hf_token_set else 'bad' }}">HF {{ 'ready' if hf_token_set else 'missing' }}</span>
       </div>
+      <button id="quitBtn" type="button" title="Quit NixScribe" style="padding:6px 12px;font-size:12px">Quit</button>
     </div>
   </header>
-
+<section id="progressCard" class="progress-strip hidden" aria-label="Transcription progress">
+  <div id="overallTrack" class="bar" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="overallBar"></div></div>
+  <div class="progress-body">
+    <div class="progress-head">
+      <div>
+        <span id="phase" class="phase">Ready</span>
+        <span id="status" class="phase-sub"></span>
+      </div>
+      <div class="progress-meta">
+        <span id="elapsed">Elapsed 00:00:00</span>
+        <span class="stage-line"><span id="stageLabel">Stage</span><span id="stagePercent">0.0%</span><span class="smallbar"><span id="stageBar"></span></span></span>
+        <span id="overallPercent" class="percent">0.0%</span>
+      </div>
+    </div>
+    <div id="detail" class="detail"></div>
+    <div class="stats">
+      <span id="speakers"></span>
+      <span id="projectPath"></span>
+    </div>
+  </div>
+</section>
+</div>
+<div class="shell">
   <section class="card">
     <div class="section-title">Source</div>
     <div class="source-box">
@@ -209,7 +257,11 @@
         <button id="openOutputBtn" type="button">Open</button>
       </div>
       <div class="checkline">
-        <input id="copyOriginal" type="checkbox" checked>
+        <input id="saveMp3" type="checkbox" checked>
+        <label for="saveMp3">Save audio as MP3 (128 kbps)</label>
+      </div>
+      <div class="checkline">
+        <input id="copyOriginal" type="checkbox">
         <label for="copyOriginal">Keep a copy of the original media in the project</label>
       </div>
     </div>
@@ -221,9 +273,12 @@
       <div>
         <label for="model">Model</label>
         <select id="model">
-          <option value="large-v3" selected>large-v3 · maximum quality</option>
-          <option value="large-v3-turbo">large-v3-turbo · faster</option>
+          {% for model_id, model_label in models %}
+          <option value="{{ model_id }}" data-repository="{{ model_repositories[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
+          {% endfor %}
         </select>
+        <div class="hint">Model repository on Hugging Face:</div>
+        <div id="modelRepository" class="model-repository">{{ model_repositories[default_model] }}</div>
       </div>
       <div>
         <label for="computeType">Quality</label>
@@ -283,22 +338,45 @@
   </section>
 
   <section class="card">
-    <div class="progress-head">
-      <div>
-        <div id="phase" class="phase">Ready</div>
-        <div id="status" class="phase-sub">Choose an audio or video file to begin.</div>
+    <div class="section-title">Export formatting</div>
+    <div class="grid two">
+      <div class="checkline" style="margin-top:0">
+        <input id="txtGroupTurns" type="checkbox" checked>
+        <label for="txtGroupTurns">Group nearby speech by speaker (long turns still split into paragraphs)</label>
       </div>
-      <div id="overallPercent" class="percent">0.0%</div>
+      <div class="checkline" style="margin-top:0">
+        <input id="srtSpeakerLabels" type="checkbox" checked>
+        <label for="srtSpeakerLabels">Keep speaker labels in SRT subtitles</label>
+      </div>
     </div>
-    <div class="bar"><div id="overallBar"></div></div>
-    <div class="stage-line"><span id="stageLabel">Current stage</span><span id="stagePercent">0.0%</span></div>
-    <div class="smallbar"><div id="stageBar"></div></div>
-    <div class="stats">
-      <span id="elapsed">Elapsed 00:00:00</span>
-      <span id="speakers">Speakers —</span>
-      <span id="projectPath">Project —</span>
+    <div class="grid" style="margin-top:16px">
+      <div>
+        <label for="srtWidth">Characters per subtitle line</label>
+        <select id="srtWidth">
+          <option value="32">32 (compact)</option>
+          <option value="37">37 (broadcast)</option>
+          <option value="42" selected>42 (standard)</option>
+          <option value="48">48 (wide)</option>
+        </select>
+      </div>
+      <div>
+        <label for="srtLines">Lines per subtitle</label>
+        <select id="srtLines">
+          <option value="1">1 line</option>
+          <option value="2" selected>2 lines</option>
+        </select>
+      </div>
+      <div>
+        <label for="srtDuration">Maximum subtitle duration</label>
+        <select id="srtDuration">
+          <option value="3">3 seconds</option>
+          <option value="4">4 seconds</option>
+          <option value="6" selected>6 seconds</option>
+          <option value="8">8 seconds</option>
+        </select>
+      </div>
     </div>
-    <div id="detail" class="detail"></div>
+    <div class="hint">TXT has speaker labels, no timestamps, and readable paragraph breaks. SRT keeps timestamps and is split into shorter cues. Enabling speaker labels reduces the available text width.</div>
   </section>
 
   <section id="errorCard" class="card error-card hidden">
@@ -351,6 +429,15 @@
 
 <script>
 const $ = id => document.getElementById(id);
+let startingJob = false;
+let lastJobStatus = 'Idle';
+
+function updateModelRepository() {
+  const option = $('model').selectedOptions[0];
+  $('modelRepository').textContent = option ? option.dataset.repository : '';
+}
+$('model').addEventListener('change', updateModelRepository);
+updateModelRepository();
 
 function fmtTime(seconds) {
   seconds = Math.max(0, Math.floor(Number(seconds || 0)));
@@ -428,7 +515,7 @@ function fillResultFiles(paths) {
     const kind = document.createElement('span');
     kind.className = 'badge';
     const lower = path.toLowerCase();
-    kind.textContent = lower.endsWith('.srt') ? 'SRT' : lower.endsWith('.txt') ? 'TXT' : 'File';
+    kind.textContent = lower.endsWith('.srt') ? 'SRT' : lower.endsWith('.txt') ? 'TXT' : lower.endsWith('.mp3') ? 'MP3' : 'File';
 
     row.append(code, kind);
     list.appendChild(row);
@@ -474,14 +561,26 @@ async function refreshFiles(show=true) {
 async function poll() {
   try {
     const s = await jsonFetch('/api/status');
-    const op = Number(s.overall_percent || 0);
-    const sp = Number(s.stage_percent || 0);
+    const op = Math.max(0, Math.min(100, Number(s.overall_percent) || 0));
+    const sp = Math.max(0, Math.min(100, Number(s.stage_percent) || 0));
+    const status = s.status || 'Idle';
+
+    if (status !== lastJobStatus && (s.running || status === 'Complete' || status === 'Cancelled')) {
+      $('formError').textContent = '';
+    }
+    lastJobStatus = status;
+    const progress = $('progressCard');
+    progress.classList.toggle('hidden', status === 'Idle' && !s.running);
+    progress.classList.toggle('running', !!s.running);
+    progress.classList.toggle('complete', status === 'Complete');
+    progress.classList.toggle('failed', status === 'Error');
 
     $('phase').textContent = s.stage === 'Idle' ? 'Ready' : (s.stage || 'Ready');
-    $('status').textContent = s.status === 'Idle' ? 'Choose an audio or video file to begin.' : (s.status || '');
+    $('status').textContent = s.status && s.status !== s.stage && s.status !== 'Running' ? s.status : '';
     $('detail').textContent = s.detail || '';
     $('overallPercent').textContent = `${op.toFixed(1)}%`;
     $('overallBar').style.width = `${op}%`;
+    $('overallTrack').setAttribute('aria-valuenow', String(op));
     $('stagePercent').textContent = `${sp.toFixed(1)}%`;
     $('stageBar').style.width = `${sp}%`;
     $('elapsed').textContent = `Elapsed ${fmtTime(s.elapsed_seconds)}`;
@@ -501,8 +600,9 @@ async function poll() {
 
     $('log').textContent = (s.log && s.log.length) ? s.log.join('\n') : 'Waiting.';
     $('log').scrollTop = $('log').scrollHeight;
-    $('startBtn').disabled = !!s.running;
+    $('startBtn').disabled = !!s.running || startingJob;
     $('cancelBtn').disabled = !s.running;
+    $('quitBtn').disabled = !!s.running;
 
     $('wxBadge').textContent = `WhisperX ${s.whisperx_version || 'not installed'}`;
     $('tokenBadge').textContent = `HF ${s.hf_token_set ? 'ready' : 'missing'}`;
@@ -559,15 +659,24 @@ $('recentFiles').addEventListener('change', e => {
 $('inputFile').addEventListener('input', updateSourceSummary);
 
 $('startBtn').addEventListener('click', async () => {
+  if (startingJob || $('startBtn').disabled) return;
+  startingJob = true;
+  $('startBtn').disabled = true;
   $('formError').textContent = '';
   const payload = {
     input_file: $('inputFile').value.trim(),
     projects_dir: $('projectsDir').value.trim(),
     copy_original: $('copyOriginal').checked,
+    save_mp3: $('saveMp3').checked,
     model: $('model').value,
     compute_type: $('computeType').value,
     batch_size: Number($('batchSize').value),
     speaker_count: $('speakerCount').value,
+    txt_group_turns: $('txtGroupTurns').checked,
+    srt_speaker_labels: $('srtSpeakerLabels').checked,
+    srt_chars_per_line: Number($('srtWidth').value),
+    srt_max_lines: Number($('srtLines').value),
+    srt_max_duration: Number($('srtDuration').value),
     initial_prompt: $('initialPrompt').value.trim(),
     hotwords: $('hotwords').value.trim(),
   };
@@ -577,8 +686,27 @@ $('startBtn').addEventListener('click', async () => {
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });
+    $('progressCard').classList.remove('hidden');
     await poll();
-  } catch (e) { $('formError').textContent = e.message; }
+  } catch (e) {
+    if (/transcription is already running/i.test(e.message)) {
+      $('formError').textContent = '';
+      await poll();
+    } else {
+      $('formError').textContent = e.message;
+    }
+  } finally {
+    startingJob = false;
+    await poll();
+  }
+});
+
+$('quitBtn').addEventListener('click', async () => {
+  try {
+    await jsonFetch('/api/quit', {method:'POST'});
+  } catch (e) {
+    $('formError').textContent = e.message;
+  }
 });
 
 $('cancelBtn').addEventListener('click', async () => {

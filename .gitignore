@@ -27,3 +27,7 @@ recordings/
 .cache/
 models/
 Models/
+
+# Generated icons (the supplied master PNG remains tracked)
+/assets/NixScribe.png
+/assets/NixScribe.icns

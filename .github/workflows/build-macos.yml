@@ -8,8 +8,12 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: nixscribe-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-macos-arm64:
@@ -30,6 +34,13 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
 
+      - name: Test transcript formatting, model options and audio export
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Require supplied icon for stable releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test -s assets/NixScribe-master.png
+
       - name: Build NixScribe
         run: |
           chmod +x build_macos_app.sh
@@ -40,10 +51,16 @@ jobs:
           file "dist/NixScribe.app/Contents/MacOS/NixScribe"
           file "dist/NixScribe.app/Contents/MacOS/NixScribe" | grep -q "arm64"
           /usr/bin/codesign --verify --deep --strict --verbose=2 "dist/NixScribe.app"
+          test -s "dist/NixScribe.app/Contents/Resources/NixScribe.icns"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIconFile" "dist/NixScribe.app/Contents/Info.plist" | grep -q "NixScribe.icns"
 
       - name: Verify packaged ML backend API
         run: |
           "dist/NixScribe.app/Contents/MacOS/NixScribe" --self-test-backend
+
+      - name: Verify frozen native macOS imports
+        run: |
+          "dist/NixScribe.app/Contents/MacOS/NixScribe" --self-test-native
 
       - name: Smoke-test frozen app
         shell: bash
@@ -62,6 +79,9 @@ jobs:
           for attempt in {1..30}; do
             if curl -fsS "http://127.0.0.1:8765/" > /tmp/nixscribe-index.html; then
               grep -q "<title>NixScribe</title>" /tmp/nixscribe-index.html
+              grep -q 'class="progress-strip hidden"' /tmp/nixscribe-index.html
+              grep -q 'data-repository="mobiuslabsgmbh/faster-whisper-large-v3-turbo"' /tmp/nixscribe-index.html
+              grep -q 'data-repository="distil-whisper/distil-large-v3.5-ct2"' /tmp/nixscribe-index.html
               echo "Frozen NixScribe app launched and served its UI successfully."
               exit 0
             fi
@@ -78,13 +98,40 @@ jobs:
           name: NixScribe-macOS-arm64
           path: dist/NixScribe-macOS-arm64.zip
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
 
-      - name: Publish tagged release asset
-        if: startsWith(github.ref, 'refs/tags/v')
+  publish-release:
+    name: Publish stable release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build-macos-arm64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Check release tag matches app version
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(python -c 'from app_config import VERSION; print(VERSION)')"
+      - uses: actions/download-artifact@v7
+        with:
+          name: NixScribe-macOS-arm64
+          path: dist
+      - name: Publish versioned app and checksum
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
-            gh release create "$GITHUB_REF_NAME" --title "NixScribe $GITHUB_REF_NAME" --generate-notes
-          gh release upload "$GITHUB_REF_NAME" dist/NixScribe-macOS-arm64.zip --clobber
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite stable assets."
+            exit 1
+          fi
+          cd dist
+          mv NixScribe-macOS-arm64.zip "NixScribe-$GITHUB_REF_NAME-macOS-arm64.zip"
+          sha256sum "NixScribe-$GITHUB_REF_NAME-macOS-arm64.zip" > "NixScribe-$GITHUB_REF_NAME-macOS-arm64.zip.sha256"
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag --title "NixScribe $GITHUB_REF_NAME" --generate-notes \
+            "NixScribe-$GITHUB_REF_NAME-macOS-arm64.zip" \
+            "NixScribe-$GITHUB_REF_NAME-macOS-arm64.zip.sha256"
