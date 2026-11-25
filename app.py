@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
-from app_config import DEFAULT_MODEL, MODEL_IDS, MODELS, VERSION
+from app_config import DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VERSION
 from audio_export import export_mp3, mp3_destination
 
 APP_HOST = "127.0.0.1"
@@ -945,6 +945,7 @@ def index():
         default_workdir=str(DEFAULT_WORKDIR),
         default_projects_dir=str(DEFAULT_PROJECTS_DIR),
         models=MODELS,
+        model_repositories=MODEL_REPOSITORIES,
         default_model=DEFAULT_MODEL,
         app_version=VERSION,
         whisperx_version=wx or "not installed",
@@ -1173,11 +1174,14 @@ def _backend_self_test() -> None:
     import torch
     import whisperx
     from whisperx.asr import FasterWhisperPipeline
-    from faster_whisper.utils import available_models
+    from faster_whisper.utils import _MODELS, available_models
 
     missing_models = MODEL_IDS - set(available_models())
     if missing_models:
         raise RuntimeError(f"Unsupported Faster-Whisper models: {sorted(missing_models)}")
+    for model_id, repository in MODEL_REPOSITORIES.items():
+        if _MODELS.get(model_id) != repository:
+            raise RuntimeError(f"Model repository changed for {model_id}: expected {repository}")
     from whisperx.alignment import align as alignment_impl
     from whisperx.diarize import DiarizationPipeline
 

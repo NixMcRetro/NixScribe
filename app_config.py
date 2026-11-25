@@ -1,14 +1,26 @@
 """Shared version and supported CPU Whisper models."""
 VERSION = "0.2.0"
+# Repository IDs match the aliases in Faster-Whisper 1.2.1.
+# Publisher means the Hugging Face repository owner, not the model developer.
+MODEL_REPOSITORIES = {
+    "large-v3": "Systran/faster-whisper-large-v3",
+    "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    "distil-large-v3.5": "distil-whisper/distil-large-v3.5-ct2",
+    "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
+    "medium.en": "Systran/faster-whisper-medium.en",
+    "small.en": "Systran/faster-whisper-small.en",
+    "base.en": "Systran/faster-whisper-base.en",
+    "tiny.en": "Systran/faster-whisper-tiny.en",
+}
 MODELS = (
-    ("large-v3", "Whisper large-v3 (quality-first)"),
-    ("large-v3-turbo", "Whisper large-v3-turbo (faster)"),
-    ("distil-large-v3.5", "Distil-Whisper large-v3.5 (English)"),
-    ("distil-large-v3", "Distil-Whisper large-v3 (English)"),
-    ("medium.en", "Whisper medium.en (English)"),
-    ("small.en", "Whisper small.en (lightweight)"),
-    ("base.en", "Whisper base.en (quick draft)"),
-    ("tiny.en", "Whisper tiny.en (fastest draft)"),
+    ("large-v3", "large-v3 · Systran"),
+    ("large-v3-turbo", "large-v3-turbo · Mobius Labs"),
+    ("distil-large-v3.5", "distil-large-v3.5 · Distil-Whisper"),
+    ("distil-large-v3", "distil-large-v3 · Systran"),
+    ("medium.en", "medium.en · Systran"),
+    ("small.en", "small.en · Systran"),
+    ("base.en", "base.en · Systran"),
+    ("tiny.en", "tiny.en · Systran"),
 )
 DEFAULT_MODEL = "large-v3"
 MODEL_IDS = frozenset(model for model, _ in MODELS)

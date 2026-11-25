@@ -88,6 +88,26 @@ When running from source, `HF_TOKEN` is also supported:
 export HF_TOKEN='hf_...'
 ```
 
+## Model publishers
+
+The model menu shows the Hugging Face repository publisher and the exact
+repository ID for the selected model. These are converted Whisper or
+Distil-Whisper models, not eight different recognition engines.
+
+| Model | Download repository |
+| --- | --- |
+| large-v3 | Systran/faster-whisper-large-v3 |
+| large-v3-turbo | mobiuslabsgmbh/faster-whisper-large-v3-turbo |
+| distil-large-v3.5 | distil-whisper/distil-large-v3.5-ct2 |
+| distil-large-v3 | Systran/faster-distil-whisper-large-v3 |
+| medium.en | Systran/faster-whisper-medium.en |
+| small.en | Systran/faster-whisper-small.en |
+| base.en | Systran/faster-whisper-base.en |
+| tiny.en | Systran/faster-whisper-tiny.en |
+
+The packaged backend self-test verifies the displayed repository IDs against
+the pinned Faster-Whisper alias mappings without downloading model weights.
+
 ## Model cache and oMLX compatibility
 
 The app deliberately does **not** create a private model cache. It follows the standard Hugging Face Hub cache resolution used by `huggingface_hub`:
@@ -204,8 +224,9 @@ paragraphs in TXT output without dropping text or timestamps from SRT.
 A speaker label starts each TXT paragraph. A silence of at least 2.5 seconds
 also breaks a paragraph.
 
-The progress card moves to the top of the window when a job begins and stays
-visible while processing. A duplicate Start click no longer leaves a persistent
+A slim, full-width progress strip appears at the top edge of the window
+when a job begins and stays visible while scrolling. It shows overall progress,
+stage progress, elapsed time and the current activity, without floating cards. A duplicate Start click no longer leaves a persistent
 error banner: the button is disabled immediately while the first request is
 pending, and transient messages clear when the job advances.
 

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 import wave
 
-from app_config import DEFAULT_MODEL, MODEL_IDS, MODELS
+from app_config import DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES
 from audio_export import export_mp3, mp3_destination
 
 
@@ -16,6 +16,13 @@ class ModelOptionsTests(unittest.TestCase):
         self.assertEqual(len(MODELS), len(MODEL_IDS))
         self.assertEqual(len(MODEL_IDS), 8)
         self.assertIn(DEFAULT_MODEL, MODEL_IDS)
+
+    def test_each_model_has_exact_repository(self):
+        self.assertEqual(set(MODEL_REPOSITORIES), MODEL_IDS)
+        self.assertEqual(MODEL_REPOSITORIES['large-v3'], 'Systran/faster-whisper-large-v3')
+        self.assertEqual(MODEL_REPOSITORIES['large-v3-turbo'], 'mobiuslabsgmbh/faster-whisper-large-v3-turbo')
+        self.assertEqual(MODEL_REPOSITORIES['distil-large-v3.5'], 'distil-whisper/distil-large-v3.5-ct2')
+        self.assertTrue(all(repo.count('/') == 1 for repo in MODEL_REPOSITORIES.values()))
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),

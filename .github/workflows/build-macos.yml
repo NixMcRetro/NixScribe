@@ -79,6 +79,9 @@ jobs:
           for attempt in {1..30}; do
             if curl -fsS "http://127.0.0.1:8765/" > /tmp/nixscribe-index.html; then
               grep -q "<title>NixScribe</title>" /tmp/nixscribe-index.html
+              grep -q 'class="progress-strip hidden"' /tmp/nixscribe-index.html
+              grep -q 'data-repository="mobiuslabsgmbh/faster-whisper-large-v3-turbo"' /tmp/nixscribe-index.html
+              grep -q 'data-repository="distil-whisper/distil-large-v3.5-ct2"' /tmp/nixscribe-index.html
               echo "Frozen NixScribe app launched and served its UI successfully."
               exit 0
             fi
