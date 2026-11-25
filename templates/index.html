@@ -142,7 +142,7 @@
     .progress-meta { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 12px; }
     .stage-line { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; }
     .smallbar { width: 58px; height: 3px; background: var(--surface-soft); border-radius: 2px; overflow: hidden; }
-    .smallbar > div { height: 100%; width: 0; background: var(--accent); }
+    .smallbar > span { display: block; height: 100%; width: 0; background: var(--accent); }
     .stats { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
     .progress-strip.running .stats { display: none; }
     .detail { margin-top: 4px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
@@ -202,7 +202,7 @@
       </div>
       <div class="progress-meta">
         <span id="elapsed">Elapsed 00:00:00</span>
-        <span class="stage-line"><span id="stageLabel">Stage</span><span id="stagePercent">0.0%</span><span class="smallbar"><span id="stageBar" style="display:block"></span></span></span>
+        <span class="stage-line"><span id="stageLabel">Stage</span><span id="stagePercent">0.0%</span><span class="smallbar"><span id="stageBar"></span></span></span>
         <span id="overallPercent" class="percent">0.0%</span>
       </div>
     </div>
