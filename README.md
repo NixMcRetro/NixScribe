@@ -199,6 +199,33 @@ If a project with the same recording name already exists, the next one is named 
 
 NixScribe creates a temporary 16 kHz mono PCM WAV inside the job’s hidden working directory before transcription. That working WAV is removed automatically after a successful job. If a job is cancelled or fails, the incomplete project folder and its working audio are removed. The original source media is never automatically deleted.
 
+## Experimental Apple GPU speaker identification
+
+Choose CPU (recommended) or Apple GPU (experimental) in the speaker
+identification selector, independently of the speech recognition model.
+Both use the same existing Pyannote Community-1 model and Hugging Face cache.
+Single-speaker mode skips diarization altogether. Word alignment remains CPU.
+
+The experimental option uses PyTorch MPS in a separate process. A native
+crash, unavailable MPS device, unsupported operation, invalid output or empty
+speaker intervals when speech was recognized causes an explicitly logged CPU
+retry. Unsupported MPS operations are not silently redirected by PyTorch's
+fallback environment variable. Some pipeline work, such as clustering, can
+still run on CPU. The log records requested and successful device and elapsed
+time (including model loading; separate from any failed attempt).
+
+Compare CPU and GPU on identical local media and speaker counts; speed is not
+a guarantee of equal diarization accuracy. Speaker IDs may swap between runs.
+No inference or benchmarks on physical MPS hardware have been verified by CI.
+The bundled application can check actual MPS arithmetic via:
+
+```bash
+/Applications/NixScribe.app/Contents/MacOS/NixScribe --self-test-mps
+```
+
+A passing arithmetic test does not establish successful model inference.
+Core ML/FluidAudio evaluation remains separate follow-up work.
+
 ## Activity log
 
 Expand Activity log and click **Copy Activity Log** to copy the full current

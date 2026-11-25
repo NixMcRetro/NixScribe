@@ -26,6 +26,7 @@ from mlx_backend import transcribe_mlx
 from model_cache import prepare_model, repository_for
 from audio_export import export_mp3, mp3_destination
 from project_paths import create_project_dir
+from diarization_backend import DEVICES as DIARIZATION_DEVICES, run_mps
 
 APP_HOST = "127.0.0.1"
 APP_PORT = int(os.environ.get("WHISPERX_UI_PORT", "8765"))
@@ -619,7 +620,8 @@ def _run_job(config: dict[str, Any]) -> None:
         _append_log(f"PyTorch cache: {_torch_cache()}")
         _append_log(
             f"Profile: model={config['model']}, compute={config['compute_type']}, "
-            f"batch={config['batch_size']}, speakers={config['speaker_count'] or 'Auto'}"
+            f"batch={config['batch_size']}, speakers={config['speaker_count'] or 'Auto'}, "
+            f"diarization={config.get('diarization_device', 'cpu')}"
         )
         _cancel_if_requested()
 
@@ -783,42 +785,75 @@ def _run_job(config: dict[str, Any]) -> None:
             _update(stage_percent=100.0, overall_percent=97.0)
             _append_log("Single-speaker mode: pyannote diarization skipped")
         else:
-            _update(
-                stage="Loading diarization",
-                detail="Loading pyannote Community-1 speaker diarization…",
-                stage_percent=0.0,
-                overall_percent=83.0,
-            )
-            diarize_model = DiarizationPipeline(
-                model_name="pyannote/speaker-diarization-community-1",
-                token=hf_token,
-                device="cpu",
-            )
-            _update(stage_percent=2.0, overall_percent=84.0)
-            _append_log("Speaker diarization started")
+            requested_device = config.get("diarization_device", "cpu")
+            actual_device = requested_device
+            diarize_started = time.monotonic()
+            diarize_segments = None
 
-            diarize_cb = stage_callback(
-                "Identifying speakers",
-                "Detecting speaker turns and assigning speaker IDs…",
-                84.0,
-                97.0,
-            )
-            diarize_kwargs: dict[str, Any] = {
-                "progress_callback": diarize_cb,
-            }
-            if speaker_count is not None:
-                diarize_kwargs["num_speakers"] = speaker_count
+            if requested_device == "mps":
+                _update(stage="Loading diarization",
+                        detail="Loading Pyannote Community-1 on Apple GPU (experimental)…",
+                        stage_percent=0.0, overall_percent=83.0)
+                _append_log("Speaker diarization requested - Pyannote Community-1 (Apple GPU / MPS)")
 
-            diarize_segments = diarize_model(
-                str(working_input),
-                **diarize_kwargs,
-            )
+                def mps_progress(phase: str, percent: float) -> None:
+                    if phase == "loading":
+                        return
+                    stage_callback("Identifying speakers",
+                                   "Detecting speaker turns on Apple GPU…",
+                                   84.0, 97.0)(percent)
+
+                try:
+                    import pandas as pd
+                    intervals = run_mps(working_input, speaker_count,
+                                        mps_progress, _cancel_if_requested)
+                    if not intervals and result.get("segments"):
+                        raise RuntimeError("GPU diarization returned no speaker intervals for recognized speech")
+                    diarize_segments = pd.DataFrame(intervals, columns=["start", "end", "speaker"])
+                    _append_log("Experimental MPS diarization completed")
+                except JobCancelled:
+                    raise
+                except Exception as exc:
+                    _cancel_if_requested()
+                    _append_log(f"GPU diarization failed: {type(exc).__name__}: {exc}")
+                    _append_log("Retrying speaker diarization on CPU; GPU output discarded")
+                    actual_device = "cpu"
+                    diarize_started = time.monotonic()
+                    _update(stage="Loading diarization",
+                            detail="Apple GPU unavailable or failed. Retrying on CPU…",
+                            stage_percent=0.0, overall_percent=83.0)
+
+            if diarize_segments is None:
+                _update(stage="Loading diarization",
+                        detail="Loading Pyannote Community-1 on CPU…",
+                        stage_percent=0.0, overall_percent=83.0)
+                diarize_model = DiarizationPipeline(
+                    model_name="pyannote/speaker-diarization-community-1",
+                    token=hf_token,
+                    device="cpu",
+                )
+                _update(stage_percent=2.0, overall_percent=84.0)
+                _append_log("Speaker diarization started - Pyannote Community-1 (CPU)")
+                diarize_cb = stage_callback(
+                    "Identifying speakers",
+                    "Detecting speaker turns on CPU…",
+                    84.0, 97.0,
+                )
+                diarize_kwargs: dict[str, Any] = {
+                    "progress_callback": diarize_cb,
+                }
+                if speaker_count is not None:
+                    diarize_kwargs["num_speakers"] = speaker_count
+                diarize_segments = diarize_model(str(working_input), **diarize_kwargs)
+                del diarize_model
+            diarize_elapsed = time.monotonic() - diarize_started
+            _append_log(f"Diarization elapsed: {diarize_elapsed:.1f}s "
+                        f"(device={actual_device}, requested={requested_device}; includes model loading)")
             result = whisperx.assign_word_speakers(
                 diarize_segments,
                 result,
                 fill_nearest=True,
             )
-            del diarize_model
             _torch_cleanup(torch)
             _cancel_if_requested()
 
@@ -1125,6 +1160,7 @@ def start_job():
         "batch_size": max(1, min(16, int(payload.get("batch_size", 4)))),
         "threads": max(0, min(32, int(payload.get("threads", 0)))),
         "speaker_count": speaker_count,
+        "diarization_device": str(payload.get("diarization_device", "cpu")),
         "txt_group_turns": payload.get("txt_group_turns", True) is True,
         "srt_speaker_labels": payload.get("srt_speaker_labels", True) is True,
         "srt_chars_per_line": srt_width,
@@ -1134,6 +1170,8 @@ def start_job():
         "hotwords": str(payload.get("hotwords", "")).strip(),
     }
 
+    if config["diarization_device"] not in DIARIZATION_DEVICES:
+        return jsonify({"ok": False, "error": "Unsupported speaker identification device."}), 400
     if config["model"] not in ALL_MODEL_IDS:
         return jsonify({"ok": False, "error": "Unsupported model selection."}), 400
     if config["model"] in MLX_REPOSITORIES:
@@ -1265,6 +1303,10 @@ def _backend_self_test() -> None:
                 "progress_callback",
             },
         ),
+        "DiarizationPipeline.__init__": (
+            DiarizationPipeline.__init__,
+            {"model_name", "token", "device"},
+        ),
         "DiarizationPipeline.__call__": (
             DiarizationPipeline.__call__,
             {"audio", "num_speakers", "progress_callback"},
@@ -1294,6 +1336,15 @@ def _open_browser() -> None:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 4 and sys.argv[1] == "--mps-diarization-worker":
+        from diarization_backend import worker_main as diarization_worker
+        diarization_worker(Path(sys.argv[2]), Path(sys.argv[3]), _get_hf_token())
+        raise SystemExit(0)
+    if "--self-test-mps" in sys.argv:
+        from diarization_backend import require_mps
+        require_mps()
+        print("PyTorch Apple GPU arithmetic passed; diarization accuracy is not yet verified")
+        raise SystemExit(0)
     if len(sys.argv) == 4 and sys.argv[1] == "--model-download-worker":
         from model_cache import download_worker
         download_worker(sys.argv[2], Path(sys.argv[3]))

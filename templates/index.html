@@ -321,6 +321,12 @@
           <option value="10">10 speakers</option>
         </select>
         <div class="hint">Choose the exact count when known. One speaker skips diarization.</div>
+        <label for="diarizationDevice" style="margin-top:12px">Speaker identification</label>
+        <select id="diarizationDevice">
+          <option value="cpu" selected>CPU (recommended)</option>
+          <option value="mps">Apple GPU (experimental)</option>
+        </select>
+        <div id="diarizationHint" class="hint">Independent of the transcription model.</div>
       </div>
     </div>
 
@@ -463,11 +469,24 @@ function updateModelRepository() {
   $('batchSize').disabled = isMLX;
   $('hotwords').disabled = isMLX;
   $('engineHint').textContent = isMLX
-    ? 'Experimental Apple GPU recognition (FP16). CPU alignment and diarization still apply. Use Context for names; hotwords, CPU quality and batch settings do not apply. Live transcript appears after decoding.'
+    ? 'Experimental Apple GPU recognition (FP16). Word alignment runs on CPU; speaker identification is selected separately. Use Context for names; hotwords, CPU quality and batch settings do not apply. Live transcript appears after decoding.'
     : 'CPU speech recognition; existing alignment and speaker identification.';
 }
 $('model').addEventListener('change', updateModelRepository);
 updateModelRepository();
+
+function updateDiarizationDevice() {
+  const single = $('speakerCount').value === '1';
+  $('diarizationDevice').disabled = single;
+  $('diarizationHint').textContent = single
+    ? 'One speaker skips speaker identification.'
+    : $('diarizationDevice').value === 'mps'
+      ? 'Experimental. Retries on CPU if GPU processing fails.'
+      : 'Independent of the transcription model.';
+}
+$('speakerCount').addEventListener('change', updateDiarizationDevice);
+$('diarizationDevice').addEventListener('change', updateDiarizationDevice);
+updateDiarizationDevice();
 
 function fmtTime(seconds) {
   seconds = Math.max(0, Math.floor(Number(seconds || 0)));
@@ -737,6 +756,7 @@ $('startBtn').addEventListener('click', async () => {
     compute_type: $('computeType').value,
     batch_size: Number($('batchSize').value),
     speaker_count: $('speakerCount').value,
+    diarization_device: $('diarizationDevice').disabled ? 'cpu' : $('diarizationDevice').value,
     txt_group_turns: $('txtGroupTurns').checked,
     srt_speaker_labels: $('srtSpeakerLabels').checked,
     srt_chars_per_line: Number($('srtWidth').value),

@@ -88,6 +88,7 @@ jobs:
               grep -q 'data-repository="distil-whisper/distil-large-v3.5-ct2"' /tmp/nixscribe-index.html
               grep -q 'data-repository="mlx-community/whisper-large-v3-mlx"' /tmp/nixscribe-index.html
               grep -q 'data-repository="mlx-community/whisper-large-v3-turbo"' /tmp/nixscribe-index.html
+              grep -q 'id="diarizationDevice"' /tmp/nixscribe-index.html
               echo "Frozen NixScribe app launched and served its UI successfully."
               exit 0
             fi
