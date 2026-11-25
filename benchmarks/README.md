@@ -104,3 +104,26 @@ These are development experiments, not a new app mode. No reference labels
 enter the candidate rules; they are used only for evaluation. A tie with MPS
 does not justify the cost of a second engine. Do not choose a winner from the
 held-out test split; this tool deliberately rejects test manifests.
+
+
+## Offline Community-1 clustering probe (development build)
+
+Quit the app and run its bundled executable directly:
+
+    /Applications/NixScribe2.app/Contents/MacOS/NixScribe --clustering-probe --preflight
+    /Applications/NixScribe2.app/Contents/MacOS/NixScribe --clustering-probe \
+      --audio /path/to/public-dev-recording.wav --output /path/to/new-output-directory
+
+The probe performs only MPS diarization. It checks pinned package versions and
+requires cached weights; Hub offline mode and disabled telemetry are set before
+ML imports. No Whisper recognition, alignment, downloads or app API jobs.
+The original upstream pipeline is run with a per-recording memo adapter for
+segmentation and embeddings, with defensive copies on cache hits. The default
+replay must match the capture before neighbouring speaker counts are evaluated.
+The same recording is used for all trials. No reference labels are passed to
+clustering. This is a research experiment, not an app feature. A separate local
+scoring step must compare the resulting intervals against saved aligned words.
+Share only the aggregate probe-report.json for public development clips. Keep
+private-inference.npz and private-intervals.json outside the repository and
+locally protected; they contain voice-derived data. Cross-process replay of the
+NPZ is not implemented in this first probe. No test-set tuning.

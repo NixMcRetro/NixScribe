@@ -20,6 +20,11 @@ from pathlib import Path
 from datetime import date
 from typing import Any, Callable
 
+# Set offline policy before importing any ML dependencies in research mode.
+if __name__ == "__main__" and sys.argv[1:2] == ["--clustering-probe"]:
+    os.environ.update(HF_HUB_OFFLINE="1", HF_HUB_DISABLE_TELEMETRY="1",
+                      PYANNOTE_METRICS_ENABLED="0", PYTORCH_ENABLE_MPS_FALLBACK="0")
+
 from flask import Flask, jsonify, render_template, request
 from app_config import (DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VERSION,
                         ALL_MODEL_IDS, MLX_MODELS, MLX_REPOSITORIES,
@@ -1503,6 +1508,10 @@ def _open_browser() -> None:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--clustering-probe"]:
+        from clustering_probe import main as probe_main
+        probe_main(sys.argv[2:])
+        raise SystemExit(0)
     if len(sys.argv) == 4 and sys.argv[1] == "--mps-diarization-worker":
         from diarization_backend import worker_main as diarization_worker
         diarization_worker(Path(sys.argv[2]), Path(sys.argv[3]), _get_hf_token())

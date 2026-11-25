@@ -58,6 +58,10 @@ jobs:
         run: |
           "dist/NixScribe.app/Contents/MacOS/NixScribe" --self-test-backend
 
+      - name: Verify packaged clustering cache adapter (synthetic, no inference)
+        run: |
+          "dist/NixScribe.app/Contents/MacOS/NixScribe" --clustering-probe --self-test
+
       - name: Verify bundled MLX package and Metal shaders
         run: |
           "dist/NixScribe.app/Contents/MacOS/NixScribe" --self-test-mlx-package
