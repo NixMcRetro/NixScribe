@@ -11,7 +11,7 @@ A small local frontend for WhisperX for quality-first English transcription on A
 - Real WhisperX stage progress and percentages.
 - Live transcript view showing the most recently decoded timestamped text.
 - Keeps the Mac awake only while a transcription is running.
-- Creates a separate project folder for every transcription.
+- Creates a separate project folder for every transcription, named `YYYY-MM-DD Recording name` using the Mac's local date when the job starts. Repeated jobs on the same day receive `(2)`, `(3)` and so on; previous folders are never renamed or reused.
 - Outputs `.txt`, `.srt`, and optional 128 kbps `.mp3` audio (enabled by default).
 - Optional copy of the original recording into the project folder.
 - Hugging Face token storage in macOS Keychain.

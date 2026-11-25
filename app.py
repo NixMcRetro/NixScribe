@@ -16,6 +16,7 @@ import time
 import traceback
 import webbrowser
 from pathlib import Path
+from datetime import date
 from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
@@ -24,6 +25,7 @@ from app_config import (DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VE
 from mlx_backend import transcribe_mlx
 from model_cache import prepare_model, repository_for
 from audio_export import export_mp3, mp3_destination
+from project_paths import create_project_dir
 
 APP_HOST = "127.0.0.1"
 APP_PORT = int(os.environ.get("WHISPERX_UI_PORT", "8765"))
@@ -386,26 +388,6 @@ def _torch_cleanup(torch_module: Any = None) -> None:
         pass
 
 
-def _safe_project_name(stem: str) -> str:
-    """Return a Finder-friendly project folder name."""
-    name = re.sub(r"[\\/:*?\"<>|]", "-", stem).strip().strip(".")
-    name = re.sub(r"\s+", " ", name)
-    return name or "Transcription"
-
-
-def _unique_project_dir(projects_dir: Path, stem: str) -> Path:
-    base = _safe_project_name(stem)
-    candidate = projects_dir / base
-    if not candidate.exists():
-        return candidate
-    n = 2
-    while True:
-        candidate = projects_dir / f"{base} ({n})"
-        if not candidate.exists():
-            return candidate
-        n += 1
-
-
 def _copy_source_with_progress(source: Path, destination: Path) -> None:
     total = max(1, source.stat().st_size)
     copied = 0
@@ -576,11 +558,9 @@ def _run_job(config: dict[str, Any]) -> None:
             raise FileNotFoundError(f"Media file not found: {input_path}")
 
         projects_dir.mkdir(parents=True, exist_ok=True)
-        # Only mark the folder as ours after exclusive creation succeeds.
-        # If another process creates the candidate first, never clean up its files.
-        candidate = _unique_project_dir(projects_dir, input_path.stem)
-        candidate.mkdir(parents=False, exist_ok=False)
-        project_dir = candidate
+        # Reserve a dated folder; never reuse an existing project.
+        project_dir = create_project_dir(projects_dir, input_path.stem,
+                                         job_date=date.fromisoformat(config["job_date"]))
         _update(projects_dir=str(projects_dir), project_dir=str(project_dir))
         _append_log(f"Project: {project_dir}")
 
@@ -1113,6 +1093,7 @@ def start_job():
     config = {
         "input_file": input_file,
         "projects_dir": projects_dir,
+        "job_date": date.today().isoformat(),
         "copy_original": payload.get("copy_original", False) is True,
         "save_mp3": payload.get("save_mp3", True) is True,
         "model": str(payload.get("model", DEFAULT_MODEL)),
