@@ -147,6 +147,15 @@
     .stage-line { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; }
     .smallbar { width: 58px; height: 3px; background: var(--surface-soft); border-radius: 2px; overflow: hidden; }
     .smallbar > span { display: block; height: 100%; width: 0; background: var(--accent); }
+    .progress-strip.indeterminate .smallbar { position: relative; }
+    .progress-strip.indeterminate .smallbar > span {
+      width: 40% !important; position: absolute;
+      animation: stage-wait 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes stage-wait { from { left: 0; } to { left: 60%; } }
+    @media (prefers-reduced-motion: reduce) {
+      .progress-strip.indeterminate .smallbar > span { animation: none; }
+    }
     .stats { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
     .progress-strip.running .stats { display: none; }
     .detail { margin-top: 4px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
@@ -589,6 +598,8 @@ async function poll() {
     progress.classList.toggle('running', !!s.running);
     progress.classList.toggle('complete', status === 'Complete');
     progress.classList.toggle('failed', status === 'Error');
+    const indeterminate = !!s.running && ['Checking model', 'Downloading model', 'Loading model', 'GPU recognition'].includes(s.stage);
+    progress.classList.toggle('indeterminate', indeterminate);
 
     $('phase').textContent = s.stage === 'Idle' ? 'Ready' : (s.stage || 'Ready');
     $('status').textContent = s.status && s.status !== s.stage && s.status !== 'Running' ? s.status : '';
@@ -596,7 +607,7 @@ async function poll() {
     $('overallPercent').textContent = `${op.toFixed(1)}%`;
     $('overallBar').style.width = `${op}%`;
     $('overallTrack').setAttribute('aria-valuenow', String(op));
-    $('stagePercent').textContent = `${sp.toFixed(1)}%`;
+    $('stagePercent').textContent = indeterminate ? '…' : `${sp.toFixed(1)}%`;
     $('stageBar').style.width = `${sp}%`;
     $('elapsed').textContent = `Elapsed ${fmtTime(s.elapsed_seconds)}`;
     $('projectPath').textContent = s.project_dir ? `Project ${s.project_dir}` : 'Project —';

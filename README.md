@@ -111,7 +111,8 @@ stage without pretending to know its percentage. The transcript appears after
 that pass. GPU errors are explicit; choose a CPU model to retry. The GPU and CPU
 engines use different segmentation and decoding, so equivalence is not assumed.
 
-The log includes ASR elapsed time and real-time factor (includes model loading).
+The log includes ASR elapsed time and real-time factor (includes model loading,
+excludes the separate model download).
 Compare a repeat run with weights already cached on the same Mac and audio.
 Use a trusted reference transcript to measure word error rate and inspect
 speaker labels/timestamps. Hosted macOS CI validates packaging, not real GPU
@@ -124,6 +125,21 @@ performance. On physical Apple silicon, run:
 This checks an actual GPU operation and MLX Whisper imports. Successful inference,
 memory and accuracy benchmarks on physical hardware remain release gates.
 Parakeet and Core ML evaluation are follow-up work, not available in this build.
+
+## Model downloads
+
+Before recognition, NixScribe checks the selected speech model's files in the
+standard Hugging Face cache. A complete cached model is loaded directly without
+a new download. If files are missing, the pinned status header says
+**Downloading model**, followed by the model name. The app then shows
+**Loading model** (CPU) or **GPU recognition** when it is ready. The detailed
+log records the repository, cache hit or miss and completion. Downloads can be
+cancelled and Hugging Face can reuse files already in its cache on the next run.
+
+During downloads and other stages without a trustworthy percentage, the stage
+indicator is indeterminate rather than displaying a fake estimate. The overall
+job percentage stays at the completed processing milestone. Alignment and
+diarization models may still perform their own first-use downloads later.
 
 ## Model publishers
 

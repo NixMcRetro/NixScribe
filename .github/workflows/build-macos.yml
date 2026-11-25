@@ -34,7 +34,7 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
 
-      - name: Test transcript formatting, model options and audio export
+      - name: Test formatting, models, cache handling and audio export
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
       - name: Require supplied icon for stable releases

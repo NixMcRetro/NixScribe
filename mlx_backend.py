@@ -60,14 +60,19 @@ def require_gpu():
 
 def worker_main(request_path: Path, result_path: Path) -> None:
     request = json.loads(request_path.read_text(encoding="utf-8"))
-    repository = MLX_REPOSITORIES[request["model"]]
+    if request["model"] not in MLX_REPOSITORIES:
+        raise ValueError("Unsupported MLX model")
+    snapshot = Path(request["snapshot"])
+    from model_cache import snapshot_ready
+    if not snapshot_ready(snapshot, request["model"]):
+        raise RuntimeError("Local MLX model is incomplete")
     mx = require_gpu()
     import mlx_whisper
 
     with mx.stream(mx.gpu):
         result = mlx_whisper.transcribe(
             request["audio"],
-            path_or_hf_repo=repository,
+            path_or_hf_repo=str(snapshot),
             language="en",
             task="transcribe",
             fp16=True,
@@ -81,7 +86,7 @@ def worker_main(request_path: Path, result_path: Path) -> None:
     result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
 
 
-def transcribe_mlx(audio_path: Path, model: str, duration: float,
+def transcribe_mlx(audio_path: Path, model: str, snapshot: Path, duration: float,
                    initial_prompt: str, check_cancel: Callable[[], None]) -> dict:
     if model not in MLX_REPOSITORIES:
         raise ValueError("Unsupported MLX model")
@@ -92,6 +97,7 @@ def transcribe_mlx(audio_path: Path, model: str, duration: float,
         result_path = work / "result.json"
         request_path.write_text(json.dumps({
             "audio": str(audio_path), "model": model, "duration": duration,
+            "snapshot": str(snapshot),
             "initial_prompt": initial_prompt,
         }), encoding="utf-8")
         # In a frozen app the executable is NixScribe; in source mode it is Python.

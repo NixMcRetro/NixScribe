@@ -22,6 +22,7 @@ from flask import Flask, jsonify, render_template, request
 from app_config import (DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VERSION,
                         ALL_MODEL_IDS, MLX_MODELS, MLX_REPOSITORIES)
 from mlx_backend import transcribe_mlx
+from model_cache import prepare_model, repository_for
 from audio_export import export_mp3, mp3_destination
 
 APP_HOST = "127.0.0.1"
@@ -643,15 +644,37 @@ def _run_job(config: dict[str, Any]) -> None:
         _update(overall_percent=6.0, stage_percent=100.0)
         _cancel_if_requested()
 
+        model_id = config["model"]
+        repository = repository_for(model_id)
+        _append_log(f"Checking local model cache: {repository}")
+
+        def model_stage(stage: str) -> None:
+            if stage == "checking":
+                _update(stage="Checking model", detail=f"Checking whether {model_id} is already saved…",
+                        stage_percent=0.0, overall_percent=6.0)
+            elif stage == "downloading":
+                _update(stage="Downloading model",
+                        detail=f"Downloading {model_id} from Hugging Face. First use can take a while.",
+                        stage_percent=0.0, overall_percent=6.0,
+                        live_position="Downloading the speech recognition model. No audio is being uploaded.")
+                _append_log(f"Model files missing; downloading {repository} to the shared Hugging Face cache")
+            elif stage == "cached":
+                _append_log(f"Model already downloaded: {repository}")
+            elif stage == "downloaded":
+                _append_log(f"Model download complete: {repository}")
+
+        model_path = prepare_model(model_id, work_dir, model_stage, _cancel_if_requested)
+        _append_log(f"Model snapshot: {model_path}")
+        _cancel_if_requested()
         asr_started = time.monotonic()
         is_mlx = config["model"] in MLX_REPOSITORIES
         if is_mlx:
-            _update(stage="Transcribing", detail="MLX Whisper on Apple GPU (model download and decoding; no percentage available yet)…",
+            _update(stage="GPU recognition", detail="Loading the cached MLX model and transcribing on Apple GPU…",
                     stage_percent=0.0, overall_percent=8.0,
                     live_position="MLX GPU decoding; transcript will appear when this pass completes.")
             _append_log(f"Experimental MLX GPU model: {MLX_REPOSITORIES[config['model']]}")
             result = transcribe_mlx(
-                working_input, config["model"], len(audio) / 16000.0,
+                working_input, config["model"], model_path, len(audio) / 16000.0,
                 config.get("initial_prompt", ""), _cancel_if_requested,
             )
             _update(stage_percent=100.0, overall_percent=66.0)
@@ -681,7 +704,8 @@ def _run_job(config: dict[str, Any]) -> None:
             _append_log("Loading Whisper ASR model")
 
             model = whisperx.load_model(
-                config["model"],
+                str(model_path),
+                local_files_only=True,
                 device="cpu",
                 compute_type=config["compute_type"],
                 language="en",
@@ -1259,6 +1283,10 @@ def _open_browser() -> None:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 4 and sys.argv[1] == "--model-download-worker":
+        from model_cache import download_worker
+        download_worker(sys.argv[2], Path(sys.argv[3]))
+        raise SystemExit(0)
     if len(sys.argv) == 4 and sys.argv[1] == "--mlx-worker":
         from mlx_backend import worker_main
         worker_main(Path(sys.argv[2]), Path(sys.argv[3]))
