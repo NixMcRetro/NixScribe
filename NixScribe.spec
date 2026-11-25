@@ -19,6 +19,14 @@ if ffprobe and Path(ffprobe).is_file():
     binaries.append((ffprobe, "bin"))
 
 datas = [(str(project / "templates"), "templates")]
+native_diarizer = os.environ.get("NIXSCRIBE_DIARIZER")
+fluid_license = os.environ.get("NIXSCRIBE_FLUID_LICENSE")
+if not native_diarizer or not Path(native_diarizer).is_file():
+    raise SystemExit("Native FluidAudio helper is missing")
+if not fluid_license or not Path(fluid_license).is_file():
+    raise SystemExit("FluidAudio license is missing")
+binaries.append((native_diarizer, "bin"))
+datas.append((fluid_license, "licenses/FluidAudio"))
 hiddenimports = []
 
 # WhisperX and the diarization stack use plugin registries and dynamic imports.

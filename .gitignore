@@ -31,3 +31,7 @@ Models/
 # Generated icons (the supplied master PNG remains tracked)
 /assets/NixScribe.png
 /assets/NixScribe.icns
+
+# Swift native diarization build cache
+native-diarizer/.build/
+native-diarizer/.swiftpm/

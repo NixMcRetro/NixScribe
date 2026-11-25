@@ -124,7 +124,7 @@ performance. On physical Apple silicon, run:
 
 This checks an actual GPU operation and MLX Whisper imports. Successful inference,
 memory and accuracy benchmarks on physical hardware remain release gates.
-Parakeet and Core ML evaluation are follow-up work, not available in this build.
+Parakeet remains follow-up work. Experimental Core ML diarization is separate from MLX recognition.
 
 ## Model downloads
 
@@ -201,9 +201,9 @@ NixScribe creates a temporary 16 kHz mono PCM WAV inside the job’s hidden work
 
 ## Experimental Apple GPU speaker identification
 
-Choose CPU (recommended) or Apple GPU (experimental) in the speaker
-identification selector, independently of the speech recognition model.
-Both use the same existing Pyannote Community-1 model and Hugging Face cache.
+Apple GPU (MPS) is the default on Apple silicon; CPU remains available.
+Choose the speaker identification backend independently of speech recognition.
+The MPS and CPU options use the same Pyannote Community-1 model and Hugging Face cache.
 Single-speaker mode skips diarization altogether. Word alignment remains CPU.
 
 The experimental option uses PyTorch MPS in a separate process. A native
@@ -224,7 +224,23 @@ The bundled application can check actual MPS arithmetic via:
 ```
 
 A passing arithmetic test does not establish successful model inference.
-Core ML/FluidAudio evaluation remains separate follow-up work.
+### Experimental Core ML (FluidAudio)
+
+The third option uses a bundled native Swift helper with FluidAudio v0.18.4
+(Apache-2.0, https://github.com/FluidInference/FluidAudio), pinned to that
+release with only its Diarizer trait enabled. Core ML uses all compute units
+(.all), allowing CPU, GPU and ANE scheduling; the Neural Engine is not
+guaranteed to execute every operation. First use can download separate
+model weights under ~/Library/Application Support/FluidAudio/Models.
+The models are checked offline first; audio inference is local.
+The existing Hugging Face token is still required for multi-speaker jobs
+because the fallback uses the gated Pyannote model. Exact speaker count
+is passed as a target, not a guarantee. On failure the app logs the reason
+and retries CPU diarization. Source builds require Swift 6.2 or later
+(macOS 15+); build the helper with
+`swift build --package-path native-diarizer -c release`.
+Physical-device speed, accuracy and memory benchmarks remain pending.
+The build includes FluidAudio's Apache-2.0 license.
 
 ## Activity log
 

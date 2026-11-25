@@ -16,7 +16,12 @@ import tempfile
 from typing import Any, Callable
 
 REPOSITORY = "pyannote/speaker-diarization-community-1"
-DEVICES = frozenset(("cpu", "mps"))
+DEVICES = frozenset(("cpu", "mps", "coreml"))
+
+
+def default_device() -> str:
+    import platform
+    return "mps" if sys.platform == "darwin" and platform.machine() == "arm64" else "cpu"
 
 
 def validate_intervals(rows: Any) -> list[dict]:
@@ -124,6 +129,58 @@ def run_mps(audio: Path, speaker_count: int | None,
                     import re
                     detail = re.sub(r"hf_[A-Za-z0-9]+", "[redacted]", detail)
                     raise RuntimeError(f"MPS diarization worker exited ({rc})"
+                                       + (f": {detail}" if detail else ""))
+                rows = validate_intervals(json.loads(result.read_text(encoding="utf-8"))["intervals"])
+                on_progress("inference", 100.0)
+                return rows
+            finally:
+                if proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait()
+
+
+def run_coreml(helper: Path, audio: Path, speaker_count: int | None,
+               on_progress: Callable[[str, float], None],
+               check_cancel: Callable[[], None]) -> list[dict]:
+    """Run the bundled native helper; no recordings are sent to the network."""
+    check_cancel()
+    if not helper.is_file() or not os.access(helper, os.X_OK):
+        raise RuntimeError("Bundled FluidAudio helper is unavailable")
+    with tempfile.TemporaryDirectory(prefix="diarization-coreml-", dir=audio.parent) as tmp:
+        result = Path(tmp) / "result.json"
+        progress = Path(tmp) / "progress.json"
+        command = [str(helper), str(audio), str(result),
+                   str(speaker_count) if speaker_count is not None else "auto"]
+        with tempfile.TemporaryFile() as log:
+            proc = subprocess.Popen(command, stdout=log, stderr=log)
+            try:
+                last = None
+                while True:
+                    check_cancel()
+                    if progress.is_file():
+                        value = json.loads(progress.read_text(encoding="utf-8"))
+                        current = (str(value["phase"]),
+                                   max(0.0, min(100.0, float(value["percent"]))))
+                        if current != last:
+                            on_progress(*current)
+                            last = current
+                    try:
+                        rc = proc.wait(timeout=0.25)
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
+                check_cancel()
+                if rc != 0 or not result.is_file():
+                    log.seek(0, 2)
+                    log.seek(max(0, log.tell() - 2000))
+                    import re
+                    detail = re.sub(r"hf_[A-Za-z0-9]+", "[redacted]",
+                                    log.read().decode("utf-8", errors="replace")).strip()
+                    raise RuntimeError(f"FluidAudio helper exited ({rc})"
                                        + (f": {detail}" if detail else ""))
                 rows = validate_intervals(json.loads(result.read_text(encoding="utf-8"))["intervals"])
                 on_progress("inference", 100.0)

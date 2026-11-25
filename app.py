@@ -26,7 +26,8 @@ from mlx_backend import transcribe_mlx
 from model_cache import prepare_model, repository_for
 from audio_export import export_mp3, mp3_destination
 from project_paths import create_project_dir
-from diarization_backend import DEVICES as DIARIZATION_DEVICES, run_mps
+from diarization_backend import (DEVICES as DIARIZATION_DEVICES, default_device,
+                                 run_coreml, run_mps)
 
 APP_HOST = "127.0.0.1"
 APP_PORT = int(os.environ.get("WHISPERX_UI_PORT", "8765"))
@@ -785,10 +786,49 @@ def _run_job(config: dict[str, Any]) -> None:
             _update(stage_percent=100.0, overall_percent=97.0)
             _append_log("Single-speaker mode: pyannote diarization skipped")
         else:
-            requested_device = config.get("diarization_device", "cpu")
+            requested_device = config.get("diarization_device", default_device())
             actual_device = requested_device
             diarize_started = time.monotonic()
             diarize_segments = None
+
+            if requested_device == "coreml":
+                _update(stage="Loading diarization",
+                        detail="Checking FluidAudio Core ML models…",
+                        stage_percent=0.0, overall_percent=83.0)
+                _append_log("Speaker diarization requested - FluidAudio v0.18.4 (Core ML / all compute units)")
+
+                def coreml_progress(phase: str, percent: float) -> None:
+                    if phase == "preparing":
+                        _update(stage="Loading diarization",
+                                detail="Preparing Core ML models (first use may download weights)…",
+                                stage_percent=0.0, overall_percent=83.0)
+                        _append_log("Preparing FluidAudio models; cache miss or cached model load failed")
+                    elif phase == "inference":
+                        stage_callback("Identifying speakers",
+                                       "Detecting speaker turns with Core ML…",
+                                       84.0, 97.0)(percent)
+
+                try:
+                    import pandas as pd
+                    helper = BUNDLED_BIN_DIR / "NixScribeDiarizer"
+                    if not getattr(sys, "frozen", False):
+                        helper = RESOURCE_ROOT / "native-diarizer" / ".build" / "release" / "NixScribeDiarizer"
+                    intervals = run_coreml(helper, working_input, speaker_count,
+                                           coreml_progress, _cancel_if_requested)
+                    if not intervals and result.get("segments"):
+                        raise RuntimeError("Core ML returned no speaker intervals for recognized speech")
+                    diarize_segments = pd.DataFrame(intervals, columns=["start", "end", "speaker"])
+                    _append_log("Experimental FluidAudio Core ML diarization completed")
+                    if speaker_count is not None and len({r["speaker"] for r in intervals}) != speaker_count:
+                        _append_log("Warning: FluidAudio did not return the requested exact speaker count")
+                except JobCancelled:
+                    raise
+                except Exception as exc:
+                    _cancel_if_requested()
+                    _append_log(f"Core ML diarization failed: {type(exc).__name__}: {exc}")
+                    _append_log("Retrying speaker diarization on CPU; Core ML output discarded")
+                    actual_device = "cpu"
+                    diarize_started = time.monotonic()
 
             if requested_device == "mps":
                 _update(stage="Loading diarization",
@@ -1017,6 +1057,7 @@ def index():
         app_version=VERSION,
         whisperx_version=wx or "not installed",
         hf_token_set=bool(_get_hf_token()),
+        default_diarization_device=default_device(),
     )
 
 
@@ -1160,7 +1201,7 @@ def start_job():
         "batch_size": max(1, min(16, int(payload.get("batch_size", 4)))),
         "threads": max(0, min(32, int(payload.get("threads", 0)))),
         "speaker_count": speaker_count,
-        "diarization_device": str(payload.get("diarization_device", "cpu")),
+        "diarization_device": str(payload.get("diarization_device", default_device())),
         "txt_group_turns": payload.get("txt_group_turns", True) is True,
         "srt_speaker_labels": payload.get("srt_speaker_labels", True) is True,
         "srt_chars_per_line": srt_width,

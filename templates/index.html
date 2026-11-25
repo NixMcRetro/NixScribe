@@ -323,8 +323,9 @@
         <div class="hint">Choose the exact count when known. One speaker skips diarization.</div>
         <label for="diarizationDevice" style="margin-top:12px">Speaker identification</label>
         <select id="diarizationDevice">
-          <option value="cpu" selected>CPU (recommended)</option>
-          <option value="mps">Apple GPU (experimental)</option>
+          <option value="mps" {% if default_diarization_device == 'mps' %}selected{% endif %}>Apple GPU (default on Apple silicon)</option>
+          <option value="cpu" {% if default_diarization_device == 'cpu' %}selected{% endif %}>CPU</option>
+          <option value="coreml">Core ML (experimental)</option>
         </select>
         <div id="diarizationHint" class="hint">Independent of the transcription model.</div>
       </div>
@@ -481,8 +482,10 @@ function updateDiarizationDevice() {
   $('diarizationHint').textContent = single
     ? 'One speaker skips speaker identification.'
     : $('diarizationDevice').value === 'mps'
-      ? 'Experimental. Retries on CPU if GPU processing fails.'
-      : 'Independent of the transcription model.';
+      ? 'Uses Pyannote on the Apple GPU. Retries on CPU if needed.'
+      : $('diarizationDevice').value === 'coreml'
+        ? 'FluidAudio uses CPU, GPU and Neural Engine as available. Separate first-use model download; retries on CPU if needed.'
+        : 'Independent of the transcription model.';
 }
 $('speakerCount').addEventListener('change', updateDiarizationDevice);
 $('diarizationDevice').addEventListener('change', updateDiarizationDevice);
@@ -626,7 +629,7 @@ async function poll() {
     progress.classList.toggle('running', !!s.running);
     progress.classList.toggle('complete', status === 'Complete');
     progress.classList.toggle('failed', status === 'Error');
-    const indeterminate = !!s.running && ['Checking model', 'Downloading model', 'Loading model', 'GPU recognition'].includes(s.stage);
+    const indeterminate = !!s.running && ['Checking model', 'Downloading model', 'Loading model', 'GPU recognition', 'Loading diarization'].includes(s.stage);
     progress.classList.toggle('indeterminate', indeterminate);
 
     $('phase').textContent = s.stage === 'Idle' ? 'Ready' : (s.stage || 'Ready');
