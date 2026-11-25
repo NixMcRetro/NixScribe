@@ -5,7 +5,7 @@ import os
 import runpy
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
+from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata, collect_dynamic_libs, collect_data_files
 
 project = Path(os.getcwd()).resolve()
 version = runpy.run_path(str(project / "app_config.py"))["VERSION"]
@@ -33,6 +33,10 @@ collect_packages = [
     "pyannote.database",
     "pyannote.metrics",
     "webview",
+    "mlx",
+    "mlx_whisper",
+    "tiktoken",
+    "tiktoken_ext",
 ]
 
 for package in collect_packages:
@@ -46,6 +50,12 @@ for package in collect_packages:
             hiddenimports += collect_submodules(package)
         except Exception:
             pass
+
+# The mlx-metal wheel places its native libraries and shaders under mlx/lib.
+# Collect these explicitly; normal Python module analysis is not sufficient.
+binaries += collect_dynamic_libs("mlx")
+datas += collect_data_files("mlx", includes=["**/*.metallib"])
+hiddenimports += ["mlx.core", "tiktoken_ext.openai_public"]
 
 # Preserve distribution metadata needed by importlib.metadata and several ML
 # packages. Missing packages are harmless because dependency versions differ.
@@ -61,6 +71,9 @@ metadata_packages = [
     "torchaudio",
     "transformers",
     "huggingface-hub",
+    "mlx",
+    "mlx-metal",
+    "mlx-whisper",
 ]
 for package in metadata_packages:
     try:

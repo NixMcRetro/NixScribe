@@ -88,6 +88,43 @@ When running from source, `HF_TOKEN` is also supported:
 export HF_TOKEN='hf_...'
 ```
 
+## Experimental Apple GPU recognition (v0.3.0 development)
+
+The model menu now groups the original eight CPU options separately from two
+MLX Whisper options. The original CPU default is unchanged.
+
+| GPU model | Download repository |
+| --- | --- |
+| large-v3 | mlx-community/whisper-large-v3-mlx |
+| large-v3-turbo | mlx-community/whisper-large-v3-turbo |
+
+MLX Whisper 0.4.3 and MLX/Metal 0.29.3 run the speech recognition pass on the
+Apple GPU with FP16 weights. The first use downloads distinct MLX weights into
+the standard Hugging Face cache. No cloud inference is performed. A separate
+cancellable worker process releases the GPU model before CPU forced alignment
+and speaker identification. TXT, SRT and MP3 outputs are unchanged.
+
+The CPU engine's compute type, batch size, and hotwords are not applicable to
+MLX. Context remains available. The MLX API does not provide the existing
+WhisperX progress callback, so during recognition the app reports the active
+stage without pretending to know its percentage. The transcript appears after
+that pass. GPU errors are explicit; choose a CPU model to retry. The GPU and CPU
+engines use different segmentation and decoding, so equivalence is not assumed.
+
+The log includes ASR elapsed time and real-time factor (includes model loading).
+Compare a repeat run with weights already cached on the same Mac and audio.
+Use a trusted reference transcript to measure word error rate and inspect
+speaker labels/timestamps. Hosted macOS CI validates packaging, not real GPU
+performance. On physical Apple silicon, run:
+
+```bash
+/Applications/NixScribe.app/Contents/MacOS/NixScribe --self-test-mlx
+```
+
+This checks an actual GPU operation and MLX Whisper imports. Successful inference,
+memory and accuracy benchmarks on physical hardware remain release gates.
+Parakeet and Core ML evaluation are follow-up work, not available in this build.
+
 ## Model publishers
 
 The model menu shows the Hugging Face repository publisher and the exact
@@ -246,4 +283,4 @@ require the supplied master artwork.
 - v0.4.0: multi-source time alignment, independent transcripts, auditable reconciliation and explicit uncertain differences.
 - v0.5.0: multi-model comparison and optional local language-model reconciliation, preserving the original transcript evidence. No cloud processing by default.
 
-These later stages are planned, not features of v0.2.0.
+The v0.3.0 development branch implements experimental MLX Whisper selection; Parakeet, physical-device benchmarks, and the later multi-source stages remain planned.

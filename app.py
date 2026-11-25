@@ -19,7 +19,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
-from app_config import DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VERSION
+from app_config import (DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VERSION,
+                        ALL_MODEL_IDS, MLX_MODELS, MLX_REPOSITORIES)
+from mlx_backend import transcribe_mlx
 from audio_export import export_mp3, mp3_destination
 
 APP_HOST = "127.0.0.1"
@@ -641,68 +643,86 @@ def _run_job(config: dict[str, Any]) -> None:
         _update(overall_percent=6.0, stage_percent=100.0)
         _cancel_if_requested()
 
-        asr_options = {
-            "beam_size": 5,
-            "best_of": 5,
-            "patience": 1.0,
-            "length_penalty": 1.0,
-            "temperatures": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            "compression_ratio_threshold": 2.4,
-            "log_prob_threshold": -1.0,
-            "no_speech_threshold": 0.6,
-            "condition_on_previous_text": False,
-            "initial_prompt": config.get("initial_prompt") or None,
-            "hotwords": config.get("hotwords") or None,
-            "suppress_tokens": [-1],
-            "suppress_numerals": False,
-        }
-
-        _update(
-            stage="Loading model",
-            detail=f"Loading {config['model']} on CPU ({config['compute_type']})…",
-            stage_percent=0.0,
-            overall_percent=6.5,
-        )
-        _append_log("Loading Whisper ASR model")
-
-        model = whisperx.load_model(
-            config["model"],
-            device="cpu",
-            compute_type=config["compute_type"],
-            language="en",
-            task="transcribe",
-            asr_options=asr_options,
-            vad_method="pyannote",
-            vad_options={"chunk_size": 30, "vad_onset": 0.500, "vad_offset": 0.363},
-            threads=int(config.get("threads", 0)) or 4,
-            use_auth_token=hf_token,
-        )
-        _update(stage_percent=100.0, overall_percent=8.0)
-        _cancel_if_requested()
-
-        _append_log("Transcription started")
-        transcribe_cb = stage_callback(
-            "Transcribing",
-            f"Whisper {config['model']} is decoding speech…",
-            8.0,
-            66.0,
-        )
-        live_capture = LiveTranscriptCapture(sys.stdout, max_lines=30)
-        with contextlib.redirect_stdout(live_capture):
-            result = model.transcribe(
-                audio,
-                batch_size=int(config["batch_size"]),
-                chunk_size=30,
-                verbose=True,
-                progress_callback=transcribe_cb,
+        asr_started = time.monotonic()
+        is_mlx = config["model"] in MLX_REPOSITORIES
+        if is_mlx:
+            _update(stage="Transcribing", detail="MLX Whisper on Apple GPU (model download and decoding; no percentage available yet)…",
+                    stage_percent=0.0, overall_percent=8.0,
+                    live_position="MLX GPU decoding; transcript will appear when this pass completes.")
+            _append_log(f"Experimental MLX GPU model: {MLX_REPOSITORIES[config['model']]}")
+            result = transcribe_mlx(
+                working_input, config["model"], len(audio) / 16000.0,
+                config.get("initial_prompt", ""), _cancel_if_requested,
             )
+            _update(stage_percent=100.0, overall_percent=66.0)
+        else:
+            asr_options = {
+                "beam_size": 5,
+                "best_of": 5,
+                "patience": 1.0,
+                "length_penalty": 1.0,
+                "temperatures": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                "compression_ratio_threshold": 2.4,
+                "log_prob_threshold": -1.0,
+                "no_speech_threshold": 0.6,
+                "condition_on_previous_text": False,
+                "initial_prompt": config.get("initial_prompt") or None,
+                "hotwords": config.get("hotwords") or None,
+                "suppress_tokens": [-1],
+                "suppress_numerals": False,
+            }
+
+            _update(
+                stage="Loading model",
+                detail=f"Loading {config['model']} on CPU ({config['compute_type']})…",
+                stage_percent=0.0,
+                overall_percent=6.5,
+            )
+            _append_log("Loading Whisper ASR model")
+
+            model = whisperx.load_model(
+                config["model"],
+                device="cpu",
+                compute_type=config["compute_type"],
+                language="en",
+                task="transcribe",
+                asr_options=asr_options,
+                vad_method="pyannote",
+                vad_options={"chunk_size": 30, "vad_onset": 0.500, "vad_offset": 0.363},
+                threads=int(config.get("threads", 0)) or 4,
+                use_auth_token=hf_token,
+            )
+            _update(stage_percent=100.0, overall_percent=8.0)
+            _cancel_if_requested()
+
+            _append_log("Transcription started on CPU")
+            transcribe_cb = stage_callback(
+                "Transcribing",
+                f"Whisper {config['model']} is decoding speech…",
+                8.0,
+                66.0,
+            )
+            live_capture = LiveTranscriptCapture(sys.stdout, max_lines=30)
+            with contextlib.redirect_stdout(live_capture):
+                result = model.transcribe(
+                    audio,
+                    batch_size=int(config["batch_size"]),
+                    chunk_size=30,
+                    verbose=True,
+                    progress_callback=transcribe_cb,
+                )
         _update(
             live_preview=_raw_preview_from_segments(result.get("segments", [])),
             live_position="Transcription pass complete — refining timestamps…",
             live_segment_count=len(result.get("segments", [])),
         )
         _append_log(f"Transcription finished: {len(result.get('segments', []))} ASR segments")
-        del model
+        asr_elapsed = time.monotonic() - asr_started
+        audio_seconds = len(audio) / 16000.0
+        _append_log(f"ASR elapsed: {asr_elapsed:.1f}s for {audio_seconds:.1f}s audio "
+                    f"(real-time factor {asr_elapsed / max(audio_seconds, 0.001):.3f}; includes model loading)")
+        if not is_mlx:
+            del model
         _torch_cleanup(torch)
         _cancel_if_requested()
 
@@ -946,6 +966,8 @@ def index():
         default_projects_dir=str(DEFAULT_PROJECTS_DIR),
         models=MODELS,
         model_repositories=MODEL_REPOSITORIES,
+        mlx_models=MLX_MODELS,
+        mlx_repositories=MLX_REPOSITORIES,
         default_model=DEFAULT_MODEL,
         app_version=VERSION,
         whisperx_version=wx or "not installed",
@@ -1077,8 +1099,13 @@ def start_job():
         "hotwords": str(payload.get("hotwords", "")).strip(),
     }
 
-    if config["model"] not in MODEL_IDS:
+    if config["model"] not in ALL_MODEL_IDS:
         return jsonify({"ok": False, "error": "Unsupported model selection."}), 400
+    if config["model"] in MLX_REPOSITORIES:
+        if sys.platform != "darwin":
+            return jsonify({"ok": False, "error": "MLX requires an Apple silicon Mac."}), 400
+        if config["hotwords"]:
+            return jsonify({"ok": False, "error": "MLX does not support the CPU hotwords setting. Use Context instead."}), 400
     if config["compute_type"] not in {"float32", "int8"}:
         return jsonify({"ok": False, "error": "Unsupported compute type."}), 400
 
@@ -1232,6 +1259,21 @@ def _open_browser() -> None:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 4 and sys.argv[1] == "--mlx-worker":
+        from mlx_backend import worker_main
+        worker_main(Path(sys.argv[2]), Path(sys.argv[3]))
+        raise SystemExit(0)
+    if "--self-test-mlx-package" in sys.argv:
+        from mlx_backend import check_package
+        check_package(RESOURCE_ROOT)
+        raise SystemExit(0)
+    if "--self-test-mlx" in sys.argv:
+        from mlx_backend import require_gpu
+        require_gpu()
+        import mlx_whisper
+        assert callable(mlx_whisper.transcribe)
+        print("MLX Whisper imports and Apple GPU arithmetic passed")
+        raise SystemExit(0)
     if "--self-test-backend" in sys.argv:
         _backend_self_test()
         raise SystemExit(0)
