@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate NixScribe's blue waveform Dock icon as PNG + multi-size macOS ICNS.
+"""Package the supplied NixScribe icon without altering the artwork.
 
-This file is deliberately reproducible. Assets contain no licensed fonts or
-third-party artwork, and the 1024px master is scaled by Pillow for macOS.
+The previous generated blue icon remains a development-only fallback until
+the original master PNG is committed. Stable release builds require the master.
 """
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
@@ -75,7 +75,18 @@ def create_icon() -> Image.Image:
 
 def main() -> None:
     HERE.mkdir(parents=True, exist_ok=True)
-    icon = create_icon()
+    master = HERE / "NixScribe-master.png"
+    if master.is_file():
+        with Image.open(master) as source:
+            if source.format != "PNG" or source.size != (SIZE, SIZE):
+                raise ValueError("NixScribe-master.png must be a 1024 × 1024 PNG")
+            if source.mode != "RGBA" or source.getchannel("A").getextrema() != (0, 255):
+                raise ValueError("NixScribe-master.png must have transparent and opaque pixels")
+            icon = source.copy()
+        print("Packaging the supplied NixScribe master artwork.")
+    else:
+        print("Development fallback: supplied master icon not yet in assets.")
+        icon = create_icon()
     png = HERE / "NixScribe.png"
     icns = HERE / "NixScribe.icns"
     icon.save(png, format="PNG", optimize=True)

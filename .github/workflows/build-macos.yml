@@ -37,6 +37,10 @@ jobs:
       - name: Test transcript formatting, model options and audio export
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
+      - name: Require supplied icon for stable releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test -s assets/NixScribe-master.png
+
       - name: Build NixScribe
         run: |
           chmod +x build_macos_app.sh

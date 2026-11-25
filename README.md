@@ -209,9 +209,12 @@ visible while processing. A duplicate Start click no longer leaves a persistent
 error banner: the button is disabled immediately while the first request is
 pending, and transient messages clear when the job advances.
 
-A custom blue waveform icon is generated reproducibly from
-`assets/make_icon.py` as both PNG and multi-resolution macOS ICNS during the
-normal build. The ICNS is embedded in the signed `.app`.
+The supplied 1024 × 1024 RGBA artwork belongs at
+`assets/NixScribe-master.png`. The build script `assets/make_icon.py` converts
+it to a multi-resolution macOS ICNS without changing the design or the master
+file. The ICNS is embedded in the signed `.app`. Until the master is committed,
+development builds use the old blue waveform fallback. Stable release builds
+require the supplied master artwork.
 
 ## Development roadmap
 
