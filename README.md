@@ -224,9 +224,11 @@ paragraphs in TXT output without dropping text or timestamps from SRT.
 A speaker label starts each TXT paragraph. A silence of at least 2.5 seconds
 also breaks a paragraph.
 
-A slim, full-width progress strip appears at the top edge of the window
-when a job begins and stays visible while scrolling. It shows overall progress,
-stage progress, elapsed time and the current activity, without floating cards. A duplicate Start click no longer leaves a persistent
+The compact application header, including the name, version and tagline,
+stays pinned at the top of the window while scrolling. A slim, full-width
+progress strip appears immediately underneath when a job begins. It shows
+overall progress, stage progress, elapsed time and the current activity,
+without floating cards. A duplicate Start click no longer leaves a persistent
 error banner: the button is disabled immediately while the first request is
 pending, and transient messages clear when the job advances.
 

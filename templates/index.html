@@ -50,14 +50,20 @@
         var(--bg);
       color: var(--text);
     }
-    .shell { width: min(100% - 32px, 980px); margin: 34px auto 70px; }
-    .topbar {
-      display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
-      padding: 4px 4px 18px;
+    .shell { width: min(100% - 32px, 980px); margin: 16px auto 70px; }
+    /* Keep branding, status and progress in one sticky group. The rest of the
+       document scrolls beneath it; no fixed-height offsets are needed. */
+    .pinned-header {
+      position: sticky; top: 0; z-index: 20; width: 100%;
+      background: var(--surface-strong); border-bottom: 1px solid var(--line);
     }
-    h1 { margin: 0; font-size: 32px; letter-spacing: -.65px; line-height: 1.05; }
-    .subtitle { margin-top: 6px; color: var(--muted); font-size: 14px; }
-    .status-stack { display: flex; align-items: flex-end; flex-direction: column; gap: 8px; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      width: 100%; padding: 12px 16px;
+    }
+    h1 { margin: 0; font-size: 24px; letter-spacing: -.45px; line-height: 1.12; }
+    .subtitle { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .status-stack { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
     .status-pill {
       display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line);
       background: var(--surface); border-radius: 999px; padding: 7px 11px; font-size: 12px;
@@ -121,11 +127,9 @@
     }
     details > summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 700; user-select: none; }
     details > summary::marker { color: var(--muted); }
-    /* A single, edge-to-edge status strip, outside the max-width content shell. */
+    /* The strip shares the header's sticky position and spans the window. */
     .progress-strip {
-      position: sticky; top: 0; z-index: 20; width: 100%;
-      background: var(--surface-strong); border-bottom: 1px solid var(--line);
-      margin: 0; padding: 0;
+      width: 100%; margin: 0; padding: 0;
     }
     .progress-strip .bar {
       width: 100%; height: 6px; margin: 0;
@@ -180,9 +184,9 @@
     .hidden { display: none !important; }
     .form-error { color: var(--bad); text-align: center; margin-top: 9px; font-size: 12px; font-weight: 650; }
     @media (max-width: 760px) {
-      .shell { width: min(100% - 20px, 980px); margin-top: 20px; }
-      .topbar { flex-direction: column; }
-      .status-stack { align-items: flex-start; }
+      .shell { width: min(100% - 20px, 980px); margin-top: 12px; }
+      .topbar { flex-wrap: wrap; padding: 10px 12px; }
+      .status-stack { justify-content: flex-start; }
       .microbadges { justify-content: flex-start; }
       .grid, .grid.two { grid-template-columns: 1fr; }
       .path-row, .source-box { grid-template-columns: 1fr; }
@@ -192,6 +196,21 @@
   </style>
 </head>
 <body>
+<div class="pinned-header">
+  <header class="topbar">
+    <div>
+      <h1>NixScribe <span style="font-size:12px;font-weight:400;color:var(--muted)">v{{ app_version }}</span></h1>
+      <div class="subtitle">Local transcription for macOS</div>
+    </div>
+    <div class="status-stack">
+      <div id="statusPill" class="status-pill"><span class="dot"></span><span id="statusLabel">Ready</span></div>
+      <div class="microbadges">
+        <span id="wxBadge" class="badge">WhisperX {{ whisperx_version }}</span>
+        <span id="tokenBadge" class="badge {{ 'good' if hf_token_set else 'bad' }}">HF {{ 'ready' if hf_token_set else 'missing' }}</span>
+      </div>
+      <button id="quitBtn" type="button" title="Quit NixScribe" style="padding:6px 12px;font-size:12px">Quit</button>
+    </div>
+  </header>
 <section id="progressCard" class="progress-strip hidden" aria-label="Transcription progress">
   <div id="overallTrack" class="bar" role="progressbar" aria-label="Overall progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="overallBar"></div></div>
   <div class="progress-body">
@@ -213,25 +232,8 @@
     </div>
   </div>
 </section>
+</div>
 <div class="shell">
-  <header class="topbar">
-    <div>
-      <h1>NixScribe <span style="font-size:12px;font-weight:400;color:var(--muted)">v{{ app_version }}</span></h1>
-      <div class="subtitle">Local transcription for macOS</div>
-    </div>
-    <div class="status-stack">
-      <div id="statusPill" class="status-pill"><span class="dot"></span><span id="statusLabel">Ready</span></div>
-      <div class="microbadges">
-        <span id="wxBadge" class="badge">WhisperX {{ whisperx_version }}</span>
-        <span id="tokenBadge" class="badge {{ 'good' if hf_token_set else 'bad' }}">HF {{ 'ready' if hf_token_set else 'missing' }}</span>
-      </div>
-      <button id="quitBtn" type="button" title="Quit NixScribe" style="padding:6px 12px;font-size:12px">Quit</button>
-    </div>
-  </header>
-
-
-
-
   <section class="card">
     <div class="section-title">Source</div>
     <div class="source-box">
