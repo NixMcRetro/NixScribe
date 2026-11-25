@@ -2,11 +2,13 @@
 """PyInstaller spec for the self-contained Apple-silicon macOS app."""
 
 import os
+import runpy
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules, copy_metadata
 
 project = Path(os.getcwd()).resolve()
+version = runpy.run_path(str(project / "app_config.py"))["VERSION"]
 ffmpeg = os.environ.get("WHISPERX_BUNDLED_FFMPEG")
 ffprobe = os.environ.get("WHISPERX_BUNDLED_FFPROBE")
 if not ffmpeg:
@@ -161,8 +163,8 @@ app = BUNDLE(
     info_plist={
         "CFBundleDisplayName": "NixScribe",
         "CFBundleName": "NixScribe",
-        "CFBundleShortVersionString": "0.1.0",
-        "CFBundleVersion": "1",
+        "CFBundleShortVersionString": version,
+        "CFBundleVersion": version,
         "NSHighResolutionCapable": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
         "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},

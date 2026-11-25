@@ -178,7 +178,7 @@
 <div class="shell">
   <header class="topbar">
     <div>
-      <h1>NixScribe</h1>
+      <h1>NixScribe <span style="font-size:12px;font-weight:400;color:var(--muted)">v{{ app_version }}</span></h1>
       <div class="subtitle">Local transcription for macOS</div>
     </div>
     <div class="status-stack">
@@ -234,7 +234,11 @@
         <button id="openOutputBtn" type="button">Open</button>
       </div>
       <div class="checkline">
-        <input id="copyOriginal" type="checkbox" checked>
+        <input id="saveMp3" type="checkbox" checked>
+        <label for="saveMp3">Save audio as MP3 (128 kbps)</label>
+      </div>
+      <div class="checkline">
+        <input id="copyOriginal" type="checkbox">
         <label for="copyOriginal">Keep a copy of the original media in the project</label>
       </div>
     </div>
@@ -246,8 +250,9 @@
       <div>
         <label for="model">Model</label>
         <select id="model">
-          <option value="large-v3" selected>large-v3 · maximum quality</option>
-          <option value="large-v3-turbo">large-v3-turbo · faster</option>
+          {% for model_id, model_label in models %}
+          <option value="{{ model_id }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
+          {% endfor %}
         </select>
       </div>
       <div>
@@ -478,7 +483,7 @@ function fillResultFiles(paths) {
     const kind = document.createElement('span');
     kind.className = 'badge';
     const lower = path.toLowerCase();
-    kind.textContent = lower.endsWith('.srt') ? 'SRT' : lower.endsWith('.txt') ? 'TXT' : 'File';
+    kind.textContent = lower.endsWith('.srt') ? 'SRT' : lower.endsWith('.txt') ? 'TXT' : lower.endsWith('.mp3') ? 'MP3' : 'File';
 
     row.append(code, kind);
     list.appendChild(row);
@@ -627,6 +632,7 @@ $('startBtn').addEventListener('click', async () => {
     input_file: $('inputFile').value.trim(),
     projects_dir: $('projectsDir').value.trim(),
     copy_original: $('copyOriginal').checked,
+    save_mp3: $('saveMp3').checked,
     model: $('model').value,
     compute_type: $('computeType').value,
     batch_size: Number($('batchSize').value),

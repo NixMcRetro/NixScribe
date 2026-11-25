@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
+from app_config import DEFAULT_MODEL, MODEL_IDS, MODELS, VERSION
+from audio_export import export_mp3, mp3_destination
 
 APP_HOST = "127.0.0.1"
 APP_PORT = int(os.environ.get("WHISPERX_UI_PORT", "8765"))
@@ -65,7 +67,7 @@ DEFAULT_WORKDIR = Path(
 DEFAULT_PROJECTS_DIR = Path(
     os.environ.get(
         "WHISPERX_PROJECTS_DIR",
-        str(Path.home() / "Documents" / "NixScribe Transcriptions"),
+        str(Path.home() / "Documents" / "NixScribe"),
     )
 ).expanduser()
 SUPPORTED_EXTENSIONS = {
@@ -577,13 +579,13 @@ def _run_job(config: dict[str, Any]) -> None:
         _append_log(f"Project: {project_dir}")
 
         source_for_job = input_path
-        if bool(config.get("copy_original", True)):
+        if bool(config.get("copy_original", False)):
             copied_input = project_dir / input_path.name
             _copy_source_with_progress(input_path, copied_input)
             source_for_job = copied_input
             _append_log(f"Original media copied into project: {copied_input.name}")
         else:
-            _append_log("Original media left in place; project will contain transcript files only")
+            _append_log("Original media left in place")
 
         speaker_count = int(config["speaker_count"]) if config.get("speaker_count") else None
 
@@ -608,6 +610,14 @@ def _run_job(config: dict[str, Any]) -> None:
         work_dir = project_dir / ".nixscribe-work"
         working_input = work_dir / "audio-16k-mono.wav"
         _extract_audio_to_wav(source_for_job, working_input)
+        mp3_path = None
+        if config.get("save_mp3", True):
+            _update(stage="Saving audio", detail="Encoding original audio to 128 kbps MP3…",
+                    stage_percent=0.0, overall_percent=5.0)
+            mp3_path = export_mp3(source_for_job, mp3_destination(project_dir, input_path.stem),
+                                  _cancel_if_requested)
+            _append_log(f"MP3 audio saved: {mp3_path.name}")
+            _update(stage_percent=100.0, overall_percent=5.0)
 
         _update(
             status="Running",
@@ -804,7 +814,7 @@ def _run_job(config: dict[str, Any]) -> None:
 
         _update(
             stage="Writing files",
-            detail="Writing timestamped speaker TXT and SRT…",
+            detail="Writing speaker-labelled TXT and timed SRT…",
             stage_percent=10.0,
             overall_percent=97.3,
         )
@@ -824,6 +834,8 @@ def _run_job(config: dict[str, Any]) -> None:
         _update(stage_percent=85.0, overall_percent=99.2)
 
         output_files = [str(txt_path), str(srt_path)]
+        if mp3_path is not None:
+            output_files.append(str(mp3_path))
         preview = txt_path.read_text(encoding="utf-8", errors="replace")
         if len(preview) > 120_000:
             preview = preview[:120_000] + "\n\n[Preview truncated in UI; full file is on disk.]\n"
@@ -932,6 +944,9 @@ def index():
         "index.html",
         default_workdir=str(DEFAULT_WORKDIR),
         default_projects_dir=str(DEFAULT_PROJECTS_DIR),
+        models=MODELS,
+        default_model=DEFAULT_MODEL,
+        app_version=VERSION,
         whisperx_version=wx or "not installed",
         hf_token_set=bool(_get_hf_token()),
     )
@@ -1045,8 +1060,9 @@ def start_job():
     config = {
         "input_file": input_file,
         "projects_dir": projects_dir,
-        "copy_original": bool(payload.get("copy_original", True)),
-        "model": str(payload.get("model", "large-v3")),
+        "copy_original": payload.get("copy_original", False) is True,
+        "save_mp3": payload.get("save_mp3", True) is True,
+        "model": str(payload.get("model", DEFAULT_MODEL)),
         "compute_type": str(payload.get("compute_type", "float32")),
         "batch_size": max(1, min(16, int(payload.get("batch_size", 4)))),
         "threads": max(0, min(32, int(payload.get("threads", 0)))),
@@ -1060,7 +1076,7 @@ def start_job():
         "hotwords": str(payload.get("hotwords", "")).strip(),
     }
 
-    if config["model"] not in {"large-v3", "large-v3-turbo"}:
+    if config["model"] not in MODEL_IDS:
         return jsonify({"ok": False, "error": "Unsupported model selection."}), 400
     if config["compute_type"] not in {"float32", "int8"}:
         return jsonify({"ok": False, "error": "Unsupported compute type."}), 400
@@ -1157,6 +1173,11 @@ def _backend_self_test() -> None:
     import torch
     import whisperx
     from whisperx.asr import FasterWhisperPipeline
+    from faster_whisper.utils import available_models
+
+    missing_models = MODEL_IDS - set(available_models())
+    if missing_models:
+        raise RuntimeError(f"Unsupported Faster-Whisper models: {sorted(missing_models)}")
     from whisperx.alignment import align as alignment_impl
     from whisperx.diarize import DiarizationPipeline
 

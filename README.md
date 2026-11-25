@@ -4,7 +4,7 @@ A small local frontend for WhisperX for quality-first English transcription on A
 
 ## Features
 
-- Whisper `large-v3` by default, with `large-v3-turbo` available for faster jobs.
+- Eight selectable CPU Whisper models, with `large-v3` as the quality-first default. Model weights download on first use.
 - English transcription with forced alignment for accurate timestamps.
 - Pyannote Community-1 speaker diarization.
 - Speaker selector: Auto or an exact 1-10 speakers.
@@ -12,7 +12,7 @@ A small local frontend for WhisperX for quality-first English transcription on A
 - Live transcript view showing the most recently decoded timestamped text.
 - Keeps the Mac awake only while a transcription is running.
 - Creates a separate project folder for every transcription.
-- Outputs only `.txt` and `.srt`.
+- Outputs `.txt`, `.srt`, and optional 128 kbps `.mp3` audio (enabled by default).
 - Optional copy of the original recording into the project folder.
 - Hugging Face token storage in macOS Keychain.
 - Reuses the standard Hugging Face cache shared by compatible tools such as oMLX.
@@ -20,8 +20,9 @@ A small local frontend for WhisperX for quality-first English transcription on A
 Example TXT output:
 
 ```text
-[00:03:12.440 --> 00:03:18.020] SPEAKER_00: Could you describe what happened next?
-[00:03:18.310 --> 00:03:21.770] SPEAKER_01: Yes. I started by checking the earlier recording.
+[SPEAKER_00] Could you describe what happened next?
+
+[SPEAKER_01] Yes. I started by checking the earlier recording.
 ```
 
 ## Recommended quality settings
@@ -33,7 +34,7 @@ For a recent Apple-silicon Mac with sufficient RAM, the default quality-first pr
 - Batch size: `4`
 - Speaker count: choose the exact number when known
 
-`int8` and `large-v3-turbo` remain available when speed matters more. Selecting exactly one speaker skips pyannote diarization and does not require a Hugging Face token for that job.
+`int8` and `large-v3-turbo` remain available when speed matters more. Other model choices are `distil-large-v3.5`, `distil-large-v3`, `medium.en`, `small.en`, `base.en`, and `tiny.en`. These are Faster-Whisper CPU models, not GPU-accelerated engines. Smaller or distilled models can trade accuracy for speed. Selecting exactly one speaker skips pyannote diarization and does not require a Hugging Face token for that job.
 
 ## Build a self-contained macOS app
 
@@ -106,22 +107,22 @@ PyTorch-specific assets use the normal PyTorch cache (`TORCH_HOME` when configur
 Choose a **Transcription projects location** in the app. By default the app proposes:
 
 ```text
-~/Documents/NixScribe Transcriptions
+~/Documents/NixScribe
 ```
 
 Every run gets its own folder. For example, transcribing `interview-01.m4a` produces:
 
 ```text
-NixScribe Transcriptions/
+NixScribe/
 └── interview-01/
-    ├── interview-01.m4a
+    ├── interview-01.mp3
     ├── interview-01.txt
     └── interview-01.srt
 ```
 
 If a project with the same recording name already exists, the next one is named `interview-01 (2)`, then `interview-01 (3)`, and so on. Existing projects are never silently overwritten.
 
-**Copy the original recording into each project folder** is enabled by default. Disable it if you do not want to duplicate large recordings; the source is then read in place and is never modified or deleted.
+**Save audio as MP3 (128 kbps)** is enabled by default. Audio is encoded from the original first audio stream, not the temporary transcription WAV; source metadata is not copied. **Keep a copy of the original media** is off by default. Enable it to retain the original alongside outputs; an original MP3 is never overwritten by the encoded copy. Old project folders are unchanged.
 
 NixScribe creates a temporary 16 kHz mono PCM WAV inside the job’s hidden working directory before transcription. That working WAV is removed automatically after a successful job. If a job is cancelled or fails, the incomplete project folder and its working audio are removed. The original source media is never automatically deleted.
 
@@ -135,9 +136,9 @@ The final TXT and SRT are always written in chronological order even if internal
 
 The repository includes `.github/workflows/build-macos.yml`. GitHub Actions builds the Apple-silicon app on the native `macos-26` ARM64 runner.
 
-- Every push to `main` produces a downloadable Actions artifact.
-- Pull requests run the same build as a packaging check.
-- A tag such as `v0.1.0` also creates or updates a GitHub Release and attaches `NixScribe-macOS-arm64.zip`.
+- Every push to `main` and pull request produces a downloadable development artifact retained for three days.
+- Superseded development builds are cancelled automatically.
+- A version tag matching the app version (starting with `v0.2.0`) triggers a permanent GitHub Release only after build and test success. Each published archive includes a SHA-256 checksum. Existing releases are not overwritten automatically.
 
 The workflow does not download Whisper model weights. Models are resolved on the Mac that runs NixScribe and remain in the normal Hugging Face/PyTorch caches.
 
@@ -157,7 +158,7 @@ By default, the source-mode file browser starts around:
 and transcription projects default to:
 
 ```text
-~/Documents/NixScribe Transcriptions
+~/Documents/NixScribe
 ```
 
 Both can be overridden:
@@ -211,3 +212,12 @@ pending, and transient messages clear when the job advances.
 A custom blue waveform icon is generated reproducibly from
 `assets/make_icon.py` as both PNG and multi-resolution macOS ICNS during the
 normal build. The ICNS is embedded in the signed `.app`.
+
+## Development roadmap
+
+- v0.2.0: native application, expanded Faster-Whisper selection, MP3 export and new default project directory.
+- v0.3.0: benchmark Apple silicon accelerated ASR backends against the existing CPU baseline, with timestamps and speaker labels preserved.
+- v0.4.0: multi-source time alignment, independent transcripts, auditable reconciliation and explicit uncertain differences.
+- v0.5.0: multi-model comparison and optional local language-model reconciliation, preserving the original transcript evidence. No cloud processing by default.
+
+These later stages are planned, not features of v0.2.0.
