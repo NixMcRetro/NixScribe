@@ -199,6 +199,16 @@ If a project with the same recording name already exists, the next one is named 
 
 NixScribe creates a temporary 16 kHz mono PCM WAV inside the job’s hidden working directory before transcription. That working WAV is removed automatically after a successful job. If a job is cancelled or fails, the incomplete project folder and its working audio are removed. The original source media is never automatically deleted.
 
+## Activity log
+
+Expand Activity log and click **Copy Activity Log** to copy the full current
+job as plain text to the macOS clipboard. The log no longer drops older
+entries at an arbitrary line limit. It remains available after completion,
+cancellation or failure until the next job starts or the app quits. The
+viewport follows new entries only while at the bottom, and polling does not
+replace selected text. Logs are not automatically uploaded or saved to disk;
+check paths and technical details before sharing them.
+
 ## Live transcription view
 
 While WhisperX is decoding, the app displays the most recently emitted timestamped segments and the approximate audio position being processed. Speaker labels are added after diarization, because the ASR stage does not yet know who is speaking. Exact speaker counts use WhisperX's `num_speakers` control, and unmatched segments are filled from the nearest diarized speaker turn rather than silently defaulting to speaker 0.

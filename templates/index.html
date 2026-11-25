@@ -418,7 +418,12 @@
   <section class="card">
     <details id="logDetails">
       <summary>Activity log</summary>
-      <div id="log" class="terminal">Waiting.</div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button id="copyLogBtn" type="button" disabled>Copy Activity Log</button>
+        <span id="copyLogStatus" class="hint" role="status" aria-live="polite"></span>
+      </div>
+      <div id="log" class="terminal" tabindex="0">Waiting.</div>
+      <div class="hint">The complete current job is retained until you start another transcription or quit NixScribe.</div>
     </details>
   </section>
 
@@ -593,6 +598,9 @@ async function poll() {
     if (status !== lastJobStatus && (s.running || status === 'Complete' || status === 'Cancelled')) {
       $('formError').textContent = '';
     }
+    if (s.running && !['Starting', 'Running'].includes(lastJobStatus)) {
+      $('copyLogStatus').textContent = '';
+    }
     lastJobStatus = status;
     const progress = $('progressCard');
     progress.classList.toggle('hidden', status === 'Idle' && !s.running);
@@ -625,8 +633,19 @@ async function poll() {
       $('livePreview').scrollTop = $('livePreview').scrollHeight;
     }
 
-    $('log').textContent = (s.log && s.log.length) ? s.log.join('\n') : 'Waiting.';
-    $('log').scrollTop = $('log').scrollHeight;
+    const logEntries = s.log || [];
+    const logText = logEntries.length ? logEntries.join('\n') : 'Waiting.';
+    const logNode = $('log');
+    const selection = window.getSelection();
+    const selectingLog = selection && !selection.isCollapsed &&
+      (logNode.contains(selection.anchorNode) || logNode.contains(selection.focusNode));
+    if (logNode.textContent !== logText && !selectingLog) {
+      const atBottom = logNode.scrollHeight - logNode.scrollTop - logNode.clientHeight < 24;
+      const previousTop = logNode.scrollTop;
+      logNode.textContent = logText;
+      logNode.scrollTop = atBottom ? logNode.scrollHeight : previousTop;
+    }
+    $('copyLogBtn').disabled = !logEntries.length;
     $('startBtn').disabled = !!s.running || startingJob;
     $('cancelBtn').disabled = !s.running;
     $('quitBtn').disabled = !!s.running;
@@ -656,6 +675,25 @@ async function poll() {
     $('detail').textContent = `UI connection error: ${e.message}`;
   }
 }
+
+$('copyLogBtn').addEventListener('click', async () => {
+  const feedback = $('copyLogStatus');
+  try {
+    await jsonFetch('/api/log/copy', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-NixScribe-Action': 'copy-log'},
+      body: '{}'
+    });
+    feedback.textContent = 'Copied to clipboard.';
+  } catch (error) {
+    const range = document.createRange();
+    range.selectNodeContents($('log'));
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    feedback.textContent = 'Log selected. Press Command-C to copy.';
+  }
+});
 
 $('browseBtn').addEventListener('click', async () => {
   $('formError').textContent = '';

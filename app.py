@@ -210,7 +210,7 @@ def _append_log(message: str) -> None:
     stamp = time.strftime("%H:%M:%S")
     with state_lock:
         STATE["log"].append(f"[{stamp}] {message}")
-        STATE["log"] = STATE["log"][-250:]
+        # Keep the complete current job until another job is started.
 
 
 def _update(**kwargs: Any) -> None:
@@ -702,7 +702,7 @@ def _run_job(config: dict[str, Any]) -> None:
             _update(stage_percent=100.0, overall_percent=8.0)
             _cancel_if_requested()
 
-            _append_log("Transcription started on CPU")
+            _append_log("Speech recognition started - Faster-Whisper (CPU)")
             transcribe_cb = stage_callback(
                 "Transcribing",
                 f"Whisper {config['model']} is decoding speech…",
@@ -989,11 +989,35 @@ def index():
 def status():
     with state_lock:
         data = dict(STATE)
+        data["log"] = list(STATE["log"])
         if data.get("started_at") and data.get("running"):
             data["elapsed_seconds"] = max(0.0, time.time() - float(data["started_at"]))
     data["whisperx_version"] = whisperx_version()
     data["hf_token_set"] = bool(_get_hf_token())
     return jsonify(data)
+
+
+@app.post("/api/log/copy")
+def copy_activity_log():
+    # Only accept a same-origin UI request; copy the current log, not arbitrary
+    # client-provided clipboard contents. The clipboard stays on this Mac.
+    if not request.is_json or request.headers.get("X-NixScribe-Action") != "copy-log":
+        return jsonify({"ok": False, "error": "Invalid clipboard request."}), 400
+    origin = request.headers.get("Origin")
+    if origin and origin != request.host_url.rstrip("/"):
+        return jsonify({"ok": False, "error": "Invalid clipboard origin."}), 403
+    if sys.platform != "darwin":
+        return jsonify({"ok": False, "error": "Native clipboard is only available on macOS."}), 400
+    with state_lock:
+        entries = list(STATE["log"])
+    if not entries:
+        return jsonify({"ok": False, "error": "No activity to copy yet."}), 400
+    try:
+        subprocess.run(["/usr/bin/pbcopy"], input="\n".join(entries) + "\n",
+                       encoding="utf-8", capture_output=True, check=True, timeout=5)
+        return jsonify({"ok": True})
+    except Exception:
+        return jsonify({"ok": False, "error": "Could not copy to the macOS clipboard."}), 500
 
 
 @app.post("/api/token")
