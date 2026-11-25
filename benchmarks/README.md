@@ -73,3 +73,34 @@ cancel that job in the app if necessary.
 The benchmark does not implement an acoustic candidate yet. Do not tune using
 test data. Keep all audio, RTTM, diagnostics, reports and transcripts outside
 Git; share aggregate numbers only. Do not redistribute the source recordings.
+
+## Replay an existing development benchmark
+
+No application, audio reads, inference, dependencies or network access are
+needed after obtaining the source. From the repository root:
+
+    python3 -m benchmarks.replay ~/NixScribe-benchmark-dev \
+      --output ~/NixScribe-benchmark-dev/replay-report.json
+
+Point the command at the completed result directory containing manifest.json,
+report.json and the three per-recording job directories. It uses the original
+RTTM paths from the manifest and the existing private diagnostic JSON files.
+The original report must reproduce exactly for all word counts before any
+candidate is scored. Output is a new aggregate/per-clip JSON with no words,
+audio, speaker profiles or local paths; existing files are not replaced.
+
+Both candidates anchor on the standalone MPS labels (not the combined run's
+potentially different anonymous labels). MPS-first reverses the current
+reconciliation priority while retaining the original MPS assignment if a
+proposed label is unknown or unmatched. MPS-gap-only retains the standalone
+assignment unless MPS has zero coverage and a single mapped Core ML speaker
+covers at least half the word. Neither candidate introduces new speaker IDs.
+The existing word score optimises the anonymous mapping separately per
+candidate; the corrected/regressed audit additionally fixes the standalone
+MPS mapping for both sides so changes are directly comparable. Replay timing
+is CPU reconciliation time only, not a measurement of full inference speed.
+
+These are development experiments, not a new app mode. No reference labels
+enter the candidate rules; they are used only for evaluation. A tie with MPS
+does not justify the cost of a second engine. Do not choose a winner from the
+held-out test split; this tool deliberately rejects test manifests.
