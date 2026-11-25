@@ -18,7 +18,8 @@ binaries = [(ffmpeg, "bin")]
 if ffprobe and Path(ffprobe).is_file():
     binaries.append((ffprobe, "bin"))
 
-datas = [(str(project / "templates"), "templates")]
+datas = [(str(project / "templates"), "templates"),
+         (str(project / "assets" / "NixScribe.png"), "assets")]
 native_diarizer = os.environ.get("NIXSCRIBE_DIARIZER")
 fluid_license = os.environ.get("NIXSCRIBE_FLUID_LICENSE")
 if not native_diarizer or not Path(native_diarizer).is_file():

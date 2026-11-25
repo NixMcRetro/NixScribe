@@ -25,7 +25,7 @@ if __name__ == "__main__" and sys.argv[1:2] == ["--clustering-probe"]:
     os.environ.update(HF_HUB_OFFLINE="1", HF_HUB_DISABLE_TELEMETRY="1",
                       PYANNOTE_METRICS_ENABLED="0", PYTORCH_ENABLE_MPS_FALLBACK="0")
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file, abort
 from app_config import (DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VERSION,
                         ALL_MODEL_IDS, MLX_MODELS, MLX_REPOSITORIES,
                         MLX_CPU_FALLBACK, preferred_model, apple_silicon)
@@ -629,7 +629,8 @@ def _run_job(config: dict[str, Any]) -> None:
         _append_log(f"Hugging Face cache: {_huggingface_hub_cache()}")
         _append_log(f"PyTorch cache: {_torch_cache()}")
         _append_log(
-            f"Profile: model={config['model']}, compute={config['compute_type']}, "
+            f"Profile: model={config['model']}, "
+            f"recognition_precision={'FP16' if config['model'] in MLX_REPOSITORIES else config['compute_type']}, "
             f"batch={config['batch_size']}, speakers={config['speaker_count'] or 'Auto'}, "
             f"diarization={config.get('diarization_device', 'cpu')}"
         )
@@ -674,7 +675,7 @@ def _run_job(config: dict[str, Any]) -> None:
                 _update(stage="GPU recognition", detail="Loading the cached MLX model and transcribing on Apple GPU…",
                         stage_percent=0.0, overall_percent=8.0,
                         live_position="MLX GPU decoding; transcript will appear when this pass completes.")
-                _append_log(f"MLX GPU model: {MLX_REPOSITORIES[model_id]}")
+                _append_log(f"MLX Apple GPU model: {MLX_REPOSITORIES[model_id]} (configured FP16)")
                 result = transcribe_mlx(
                     working_input, model_id, model_path, len(audio) / 16000.0,
                     config.get("initial_prompt", ""), _cancel_if_requested,
@@ -762,7 +763,15 @@ def _run_job(config: dict[str, Any]) -> None:
         audio_seconds = len(audio) / 16000.0
         _append_log(f"ASR elapsed: {asr_elapsed:.1f}s for {audio_seconds:.1f}s audio "
                     f"(real-time factor {asr_elapsed / max(audio_seconds, 0.001):.3f}; includes model loading)")
-        _append_log(f"Recognition completed: model={model_id}, requested={requested_model}")
+        recognition = {"requested": requested_model, "actual": model_id, "repository": repository,
+                       "engine": "mlx" if is_mlx else "faster-whisper",
+                       "device": "apple-gpu" if is_mlx else "cpu",
+                       "configured_precision": "float16" if is_mlx else compute_type,
+                       "fallback": model_id != requested_model}
+        _append_log(f"Recognition completed: model={model_id}, requested={requested_model}, "
+                    f"engine={recognition['engine']}, device={recognition['device']}, "
+                    f"configured_precision={recognition['configured_precision']}, "
+                    f"fallback={'yes' if recognition['fallback'] else 'no'}")
         if not is_mlx:
             del model
         _torch_cleanup(torch)
@@ -1046,8 +1055,7 @@ def _run_job(config: dict[str, Any]) -> None:
                 final_words = [w for seg in result.get("segments", []) for w in seg.get("words", [])]
                 diagnostic_path = write_diagnostics(project_dir / "speaker-diagnostics.json", {
                     "app_version": VERSION,
-                    "recognition": {"requested": requested_model, "actual": model_id,
-                                    "repository": repository},
+                    "recognition": recognition,
                     "speaker_identification": {"requested": requested_device, "actual": actual_device,
                                                "requested_count": speaker_count,
                                                "degraded": combined and actual_device not in ("combined", "single")},
@@ -1169,6 +1177,14 @@ def _scan_audio_files() -> list[str]:
     return [str(p) for p in files[:250]]
 
 
+@app.get("/branding/icon.png")
+def brand_icon():
+    path = RESOURCE_ROOT / "assets" / "NixScribe.png"
+    if not path.is_file():
+        abort(404)
+    return send_file(path, mimetype="image/png")
+
+
 @app.get("/")
 def index():
     wx = whisperx_version()
@@ -1183,6 +1199,7 @@ def index():
         default_model=preferred_model(),
         apple_silicon=apple_silicon(),
         app_version=VERSION,
+        brand_icon=(RESOURCE_ROOT / "assets" / "NixScribe.png").is_file(),
         whisperx_version=wx or "not installed",
         hf_token_set=bool(_get_hf_token()),
         default_diarization_device=default_device(),
@@ -1332,7 +1349,7 @@ def start_job():
         "diarization_device": str(payload.get("diarization_device", default_device())),
         "save_diagnostics": payload.get("save_diagnostics", False) is True,
         "txt_group_turns": payload.get("txt_group_turns", True) is True,
-        "srt_speaker_labels": payload.get("srt_speaker_labels", True) is True,
+        "srt_speaker_labels": payload.get("srt_speaker_labels", False) is True,
         "srt_chars_per_line": srt_width,
         "srt_max_lines": srt_lines,
         "srt_max_duration": srt_duration,

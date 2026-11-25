@@ -100,6 +100,10 @@ jobs:
               grep -q 'data-repository="mlx-community/whisper-large-v3-mlx"' /tmp/nixscribe-index.html
               grep -q 'data-repository="mlx-community/whisper-large-v3-turbo"' /tmp/nixscribe-index.html
               grep -q 'id="diarizationDevice"' /tmp/nixscribe-index.html
+              grep -q 'id="mlxPrecision"' /tmp/nixscribe-index.html
+              grep -q 'class="brand-icon"' /tmp/nixscribe-index.html
+              curl -fsS "http://127.0.0.1:8765/branding/icon.png" -o /tmp/nixscribe-icon.png
+              file /tmp/nixscribe-icon.png | grep -q 'PNG image data'
               grep -q 'value="coreml" selected' /tmp/nixscribe-index.html
               grep -q 'value="mlx-large-v3".*selected' /tmp/nixscribe-index.html
               echo "Frozen NixScribe app launched and served its UI successfully."
