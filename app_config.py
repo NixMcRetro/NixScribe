@@ -35,3 +35,19 @@ MLX_MODELS = (
     ("mlx-large-v3-turbo", "large-v3-turbo - MLX Community"),
 )
 ALL_MODEL_IDS = MODEL_IDS | frozenset(MLX_REPOSITORIES)
+
+# Apple silicon is preferred; CPU remains a selectable compatibility path.
+MLX_CPU_FALLBACK = {
+    "mlx-large-v3": "large-v3",
+    "mlx-large-v3-turbo": "large-v3-turbo",
+}
+
+
+def apple_silicon() -> bool:
+    import platform
+    import sys
+    return sys.platform == "darwin" and platform.machine() == "arm64"
+
+
+def preferred_model() -> str:
+    return "mlx-large-v3" if apple_silicon() else DEFAULT_MODEL

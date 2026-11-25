@@ -21,13 +21,14 @@ from typing import Any, Callable
 
 from flask import Flask, jsonify, render_template, request
 from app_config import (DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VERSION,
-                        ALL_MODEL_IDS, MLX_MODELS, MLX_REPOSITORIES)
+                        ALL_MODEL_IDS, MLX_MODELS, MLX_REPOSITORIES,
+                        MLX_CPU_FALLBACK, preferred_model, apple_silicon)
 from mlx_backend import transcribe_mlx
 from model_cache import prepare_model, repository_for
 from audio_export import export_mp3, mp3_destination
 from project_paths import create_project_dir
 from diarization_backend import (DEVICES as DIARIZATION_DEVICES, default_device,
-                                 run_coreml, run_mps)
+                                 run_coreml, run_mps, fallback_devices)
 
 APP_HOST = "127.0.0.1"
 APP_PORT = int(os.environ.get("WHISPERX_UI_PORT", "8765"))
@@ -630,9 +631,9 @@ def _run_job(config: dict[str, Any]) -> None:
         _update(overall_percent=6.0, stage_percent=100.0)
         _cancel_if_requested()
 
-        model_id = config["model"]
+        requested_model = config["model"]
+        model_id = requested_model
         repository = repository_for(model_id)
-        _append_log(f"Checking local model cache: {repository}")
 
         def model_stage(stage: str) -> None:
             if stage == "checking":
@@ -649,22 +650,44 @@ def _run_job(config: dict[str, Any]) -> None:
             elif stage == "downloaded":
                 _append_log(f"Model download complete: {repository}")
 
-        model_path = prepare_model(model_id, work_dir, model_stage, _cancel_if_requested)
-        _append_log(f"Model snapshot: {model_path}")
-        _cancel_if_requested()
-        asr_started = time.monotonic()
-        is_mlx = config["model"] in MLX_REPOSITORIES
+        def prepare_selected_model():
+            _append_log(f"Checking local model cache: {repository}")
+            path = prepare_model(model_id, work_dir, model_stage, _cancel_if_requested)
+            _append_log(f"Model snapshot: {path}")
+            _cancel_if_requested()
+            return path
+
+        is_mlx = model_id in MLX_REPOSITORIES
         if is_mlx:
-            _update(stage="GPU recognition", detail="Loading the cached MLX model and transcribing on Apple GPU…",
-                    stage_percent=0.0, overall_percent=8.0,
-                    live_position="MLX GPU decoding; transcript will appear when this pass completes.")
-            _append_log(f"Experimental MLX GPU model: {MLX_REPOSITORIES[config['model']]}")
-            result = transcribe_mlx(
-                working_input, config["model"], model_path, len(audio) / 16000.0,
-                config.get("initial_prompt", ""), _cancel_if_requested,
-            )
-            _update(stage_percent=100.0, overall_percent=66.0)
-        else:
+            attempt_started = time.monotonic()
+            try:
+                model_path = prepare_selected_model()
+                asr_started = time.monotonic()
+                _update(stage="GPU recognition", detail="Loading the cached MLX model and transcribing on Apple GPU…",
+                        stage_percent=0.0, overall_percent=8.0,
+                        live_position="MLX GPU decoding; transcript will appear when this pass completes.")
+                _append_log(f"MLX GPU model: {MLX_REPOSITORIES[model_id]}")
+                result = transcribe_mlx(
+                    working_input, model_id, model_path, len(audio) / 16000.0,
+                    config.get("initial_prompt", ""), _cancel_if_requested,
+                )
+                _update(stage_percent=100.0, overall_percent=66.0)
+            except JobCancelled:
+                raise
+            except Exception as exc:
+                _cancel_if_requested()
+                _append_log(f"MLX attempt failed after {time.monotonic() - attempt_started:.1f}s: "
+                            f"{type(exc).__name__}: {exc}")
+                model_id = MLX_CPU_FALLBACK[requested_model]
+                repository = repository_for(model_id)
+                _append_log(f"Retrying speech recognition with {model_id} (CPU, float32)")
+                is_mlx = False
+                _torch_cleanup(torch)
+
+        if not is_mlx:
+            model_path = prepare_selected_model()
+            asr_started = time.monotonic()
+            compute_type = "float32" if requested_model in MLX_REPOSITORIES else config["compute_type"]
             asr_options = {
                 "beam_size": 5,
                 "best_of": 5,
@@ -683,7 +706,7 @@ def _run_job(config: dict[str, Any]) -> None:
 
             _update(
                 stage="Loading model",
-                detail=f"Loading {config['model']} on CPU ({config['compute_type']})…",
+                detail=f"Loading {model_id} on CPU ({compute_type})…",
                 stage_percent=0.0,
                 overall_percent=6.5,
             )
@@ -693,7 +716,7 @@ def _run_job(config: dict[str, Any]) -> None:
                 str(model_path),
                 local_files_only=True,
                 device="cpu",
-                compute_type=config["compute_type"],
+                compute_type=compute_type,
                 language="en",
                 task="transcribe",
                 asr_options=asr_options,
@@ -708,7 +731,7 @@ def _run_job(config: dict[str, Any]) -> None:
             _append_log("Speech recognition started - Faster-Whisper (CPU)")
             transcribe_cb = stage_callback(
                 "Transcribing",
-                f"Whisper {config['model']} is decoding speech…",
+                f"Whisper {model_id} is decoding speech…",
                 8.0,
                 66.0,
             )
@@ -731,6 +754,7 @@ def _run_job(config: dict[str, Any]) -> None:
         audio_seconds = len(audio) / 16000.0
         _append_log(f"ASR elapsed: {asr_elapsed:.1f}s for {audio_seconds:.1f}s audio "
                     f"(real-time factor {asr_elapsed / max(audio_seconds, 0.001):.3f}; includes model loading)")
+        _append_log(f"Recognition completed: model={model_id}, requested={requested_model}")
         if not is_mlx:
             del model
         _torch_cleanup(torch)
@@ -787,11 +811,12 @@ def _run_job(config: dict[str, Any]) -> None:
             _append_log("Single-speaker mode: pyannote diarization skipped")
         else:
             requested_device = config.get("diarization_device", default_device())
+            candidates = fallback_devices(requested_device)
             actual_device = requested_device
             diarize_started = time.monotonic()
             diarize_segments = None
 
-            if requested_device == "coreml":
+            if "coreml" in candidates:
                 _update(stage="Loading diarization",
                         detail="Checking FluidAudio Core ML models…",
                         stage_percent=0.0, overall_percent=83.0)
@@ -826,15 +851,16 @@ def _run_job(config: dict[str, Any]) -> None:
                 except Exception as exc:
                     _cancel_if_requested()
                     _append_log(f"Core ML diarization failed: {type(exc).__name__}: {exc}")
-                    _append_log("Retrying speaker diarization on CPU; Core ML output discarded")
-                    actual_device = "cpu"
+                    _append_log(f"Core ML attempt elapsed: {time.monotonic() - diarize_started:.1f}s")
+                    _append_log("Retrying speaker diarization with Pyannote on Apple GPU (MPS); Core ML output discarded")
+                    actual_device = "mps"
                     diarize_started = time.monotonic()
 
-            if requested_device == "mps":
+            if diarize_segments is None and "mps" in candidates:
                 _update(stage="Loading diarization",
                         detail="Loading Pyannote Community-1 on Apple GPU (experimental)…",
                         stage_percent=0.0, overall_percent=83.0)
-                _append_log("Speaker diarization requested - Pyannote Community-1 (Apple GPU / MPS)")
+                _append_log("Speaker diarization attempt - Pyannote Community-1 (Apple GPU / MPS)")
 
                 def mps_progress(phase: str, percent: float) -> None:
                     if phase == "loading":
@@ -856,6 +882,7 @@ def _run_job(config: dict[str, Any]) -> None:
                 except Exception as exc:
                     _cancel_if_requested()
                     _append_log(f"GPU diarization failed: {type(exc).__name__}: {exc}")
+                    _append_log(f"MPS attempt elapsed: {time.monotonic() - diarize_started:.1f}s")
                     _append_log("Retrying speaker diarization on CPU; GPU output discarded")
                     actual_device = "cpu"
                     diarize_started = time.monotonic()
@@ -1053,7 +1080,8 @@ def index():
         model_repositories=MODEL_REPOSITORIES,
         mlx_models=MLX_MODELS,
         mlx_repositories=MLX_REPOSITORIES,
-        default_model=DEFAULT_MODEL,
+        default_model=preferred_model(),
+        apple_silicon=apple_silicon(),
         app_version=VERSION,
         whisperx_version=wx or "not installed",
         hf_token_set=bool(_get_hf_token()),
@@ -1196,7 +1224,7 @@ def start_job():
         "job_date": date.today().isoformat(),
         "copy_original": payload.get("copy_original", False) is True,
         "save_mp3": payload.get("save_mp3", True) is True,
-        "model": str(payload.get("model", DEFAULT_MODEL)),
+        "model": str(payload.get("model", preferred_model())),
         "compute_type": str(payload.get("compute_type", "float32")),
         "batch_size": max(1, min(16, int(payload.get("batch_size", 4)))),
         "threads": max(0, min(32, int(payload.get("threads", 0)))),
@@ -1216,7 +1244,7 @@ def start_job():
     if config["model"] not in ALL_MODEL_IDS:
         return jsonify({"ok": False, "error": "Unsupported model selection."}), 400
     if config["model"] in MLX_REPOSITORIES:
-        if sys.platform != "darwin":
+        if not apple_silicon():
             return jsonify({"ok": False, "error": "MLX requires an Apple silicon Mac."}), 400
         if config["hotwords"]:
             return jsonify({"ok": False, "error": "MLX does not support the CPU hotwords setting. Use Context instead."}), 400

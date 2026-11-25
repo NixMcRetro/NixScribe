@@ -4,7 +4,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from diarization_backend import validate_intervals, run_mps, run_coreml, default_device
+from diarization_backend import validate_intervals, run_mps, run_coreml, default_device, fallback_devices
+from app_config import preferred_model, MLX_CPU_FALLBACK
 
 
 class DiarizationBackendTests(unittest.TestCase):
@@ -28,9 +29,18 @@ class DiarizationBackendTests(unittest.TestCase):
 
     def test_default_device_prefers_apple_silicon(self):
         with patch("diarization_backend.sys.platform", "darwin"), patch("platform.machine", return_value="arm64"):
-            self.assertEqual(default_device(), "mps")
+            self.assertEqual(default_device(), "coreml")
+            self.assertEqual(preferred_model(), "mlx-large-v3")
         with patch("diarization_backend.sys.platform", "linux"):
             self.assertEqual(default_device(), "cpu")
+            self.assertEqual(preferred_model(), "large-v3")
+
+    def test_fallback_order(self):
+        self.assertEqual(fallback_devices("coreml"), ("coreml", "mps", "cpu"))
+        self.assertEqual(fallback_devices("mps"), ("mps", "cpu"))
+        self.assertEqual(fallback_devices("cpu"), ("cpu",))
+        self.assertEqual(MLX_CPU_FALLBACK, {"mlx-large-v3": "large-v3",
+                                          "mlx-large-v3-turbo": "large-v3-turbo"})
 
     def test_missing_coreml_helper_does_not_spawn(self):
         with tempfile.TemporaryDirectory() as tmp, patch("diarization_backend.subprocess.Popen") as spawn:

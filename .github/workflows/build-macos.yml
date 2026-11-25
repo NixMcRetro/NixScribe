@@ -96,7 +96,8 @@ jobs:
               grep -q 'data-repository="mlx-community/whisper-large-v3-mlx"' /tmp/nixscribe-index.html
               grep -q 'data-repository="mlx-community/whisper-large-v3-turbo"' /tmp/nixscribe-index.html
               grep -q 'id="diarizationDevice"' /tmp/nixscribe-index.html
-              grep -q 'value="coreml"' /tmp/nixscribe-index.html
+              grep -q 'value="coreml" selected' /tmp/nixscribe-index.html
+              grep -q 'value="mlx-large-v3".*selected' /tmp/nixscribe-index.html
               echo "Frozen NixScribe app launched and served its UI successfully."
               exit 0
             fi

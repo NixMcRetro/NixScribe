@@ -4,7 +4,7 @@ A small local frontend for WhisperX for quality-first English transcription on A
 
 ## Features
 
-- Eight selectable CPU Whisper models, with `large-v3` as the quality-first default. Model weights download on first use.
+- MLX Whisper is preferred on Apple silicon, with eight selectable CPU Whisper models for compatibility and fallback. Model weights download on first use.
 - English transcription with forced alignment for accurate timestamps.
 - Pyannote Community-1 speaker diarization.
 - Speaker selector: Auto or an exact 1-10 speakers.
@@ -29,10 +29,10 @@ Example TXT output:
 
 For a recent Apple-silicon Mac with sufficient RAM, the default quality-first profile is:
 
-- Model: `large-v3`
-- Compute: `float32`
-- Batch size: `4`
+- Model: `large-v3 - MLX Community` (Apple GPU, FP16)
+- Speaker identification: Core ML (FluidAudio, all compute units)
 - Speaker count: choose the exact number when known
+- CPU fallback uses the corresponding Whisper model in float32
 
 `int8` and `large-v3-turbo` remain available when speed matters more. Other model choices are `distil-large-v3.5`, `distil-large-v3`, `medium.en`, `small.en`, `base.en`, and `tiny.en`. These are Faster-Whisper CPU models, not GPU-accelerated engines. Smaller or distilled models can trade accuracy for speed. Selecting exactly one speaker skips pyannote diarization and does not require a Hugging Face token for that job.
 
@@ -91,7 +91,7 @@ export HF_TOKEN='hf_...'
 ## Experimental Apple GPU recognition (v0.3.0 development)
 
 The model menu now groups the original eight CPU options separately from two
-MLX Whisper options. The original CPU default is unchanged.
+MLX Whisper options. MLX large-v3 is the default on Apple silicon.
 
 | GPU model | Download repository |
 | --- | --- |
@@ -108,7 +108,7 @@ The CPU engine's compute type, batch size, and hotwords are not applicable to
 MLX. Context remains available. The MLX API does not provide the existing
 WhisperX progress callback, so during recognition the app reports the active
 stage without pretending to know its percentage. The transcript appears after
-that pass. GPU errors are explicit; choose a CPU model to retry. The GPU and CPU
+that pass. A failed MLX download or inference automatically retries the matching CPU model (large-v3 or large-v3-turbo) in float32. Cancellation never starts a fallback. Both attempted and successful models are logged. The GPU and CPU
 engines use different segmentation and decoding, so equivalence is not assumed.
 
 The log includes ASR elapsed time and real-time factor (includes model loading,
@@ -201,7 +201,7 @@ NixScribe creates a temporary 16 kHz mono PCM WAV inside the job’s hidden work
 
 ## Experimental Apple GPU speaker identification
 
-Apple GPU (MPS) is the default on Apple silicon; CPU remains available.
+Core ML (FluidAudio) is preferred on Apple silicon; MPS and CPU remain selectable. A failed Core ML attempt retries MPS, then CPU. Explicit CPU selection remains CPU-only.
 Choose the speaker identification backend independently of speech recognition.
 The MPS and CPU options use the same Pyannote Community-1 model and Hugging Face cache.
 Single-speaker mode skips diarization altogether. Word alignment remains CPU.
@@ -226,7 +226,7 @@ The bundled application can check actual MPS arithmetic via:
 A passing arithmetic test does not establish successful model inference.
 ### Experimental Core ML (FluidAudio)
 
-The third option uses a bundled native Swift helper with FluidAudio v0.18.4
+The preferred option uses a bundled native Swift helper with FluidAudio v0.18.4
 (Apache-2.0, https://github.com/FluidInference/FluidAudio), pinned to that
 release with only its Diarizer trait enabled. Core ML uses all compute units
 (.all), allowing CPU, GPU and ANE scheduling; the Neural Engine is not
@@ -236,10 +236,10 @@ The models are checked offline first; audio inference is local.
 The existing Hugging Face token is still required for multi-speaker jobs
 because the fallback uses the gated Pyannote model. Exact speaker count
 is passed as a target, not a guarantee. On failure the app logs the reason
-and retries CPU diarization. Source builds require Swift 6.2 or later
+and retries MPS, then CPU diarization. Source builds require Swift 6.2 or later
 (macOS 15+); build the helper with
 `swift build --package-path native-diarizer -c release`.
-Physical-device speed, accuracy and memory benchmarks remain pending.
+Initial short-recording tests succeeded on an M5 Mac; longer-recording accuracy and memory benchmarks remain pending.
 The build includes FluidAudio's Apache-2.0 license.
 
 ## Activity log

@@ -20,8 +20,17 @@ DEVICES = frozenset(("cpu", "mps", "coreml"))
 
 
 def default_device() -> str:
-    import platform
-    return "mps" if sys.platform == "darwin" and platform.machine() == "arm64" else "cpu"
+    from app_config import apple_silicon
+    return "coreml" if apple_silicon() else "cpu"
+
+
+def fallback_devices(requested: str) -> tuple[str, ...]:
+    """Keep explicit CPU selections on CPU; progressively retry accelerated jobs."""
+    return {
+        "coreml": ("coreml", "mps", "cpu"),
+        "mps": ("mps", "cpu"),
+        "cpu": ("cpu",),
+    }[requested]
 
 
 def validate_intervals(rows: Any) -> list[dict]:
