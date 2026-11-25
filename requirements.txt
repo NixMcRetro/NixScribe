@@ -16,3 +16,8 @@ pyobjc-framework-WebKit==12.2.2
 pyobjc-framework-Quartz==12.2.2
 pyobjc-framework-Security==12.2.2
 Pillow==12.3.0
+
+# Experimental Apple GPU speech recognition; source mode on other OSes remains CPU-only.
+mlx==0.29.3; sys_platform == "darwin" and platform_machine == "arm64"
+mlx-metal==0.29.3; sys_platform == "darwin" and platform_machine == "arm64"
+mlx-whisper==0.4.3; sys_platform == "darwin" and platform_machine == "arm64"

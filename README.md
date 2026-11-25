@@ -4,14 +4,14 @@ A small local frontend for WhisperX for quality-first English transcription on A
 
 ## Features
 
-- Eight selectable CPU Whisper models, with `large-v3` as the quality-first default. Model weights download on first use.
+- MLX Whisper is preferred on Apple silicon, with eight selectable CPU Whisper models for compatibility and fallback. Model weights download on first use.
 - English transcription with forced alignment for accurate timestamps.
 - Pyannote Community-1 speaker diarization.
 - Speaker selector: Auto or an exact 1-10 speakers.
 - Real WhisperX stage progress and percentages.
 - Live transcript view showing the most recently decoded timestamped text.
 - Keeps the Mac awake only while a transcription is running.
-- Creates a separate project folder for every transcription.
+- Creates a separate project folder for every transcription, named `YYYY-MM-DD Recording name` using the Mac's local date when the job starts. Repeated jobs on the same day receive `(2)`, `(3)` and so on; previous folders are never renamed or reused.
 - Outputs `.txt`, `.srt`, and optional 128 kbps `.mp3` audio (enabled by default).
 - Optional copy of the original recording into the project folder.
 - Hugging Face token storage in macOS Keychain.
@@ -29,10 +29,10 @@ Example TXT output:
 
 For a recent Apple-silicon Mac with sufficient RAM, the default quality-first profile is:
 
-- Model: `large-v3`
-- Compute: `float32`
-- Batch size: `4`
+- Model: `large-v3 - MLX Community` (Apple GPU, FP16)
+- Speaker identification: Core ML (FluidAudio, all compute units)
 - Speaker count: choose the exact number when known
+- CPU fallback uses the corresponding Whisper model in float32
 
 `int8` and `large-v3-turbo` remain available when speed matters more. Other model choices are `distil-large-v3.5`, `distil-large-v3`, `medium.en`, `small.en`, `base.en`, and `tiny.en`. These are Faster-Whisper CPU models, not GPU-accelerated engines. Smaller or distilled models can trade accuracy for speed. Selecting exactly one speaker skips pyannote diarization and does not require a Hugging Face token for that job.
 
@@ -87,6 +87,59 @@ When running from source, `HF_TOKEN` is also supported:
 ```bash
 export HF_TOKEN='hf_...'
 ```
+
+## Experimental Apple GPU recognition (v0.3.0 development)
+
+The model menu now groups the original eight CPU options separately from two
+MLX Whisper options. MLX large-v3 is the default on Apple silicon.
+
+| GPU model | Download repository |
+| --- | --- |
+| large-v3 | mlx-community/whisper-large-v3-mlx |
+| large-v3-turbo | mlx-community/whisper-large-v3-turbo |
+
+MLX Whisper 0.4.3 and MLX/Metal 0.29.3 run the speech recognition pass on the
+Apple GPU with FP16 weights. The first use downloads distinct MLX weights into
+the standard Hugging Face cache. No cloud inference is performed. A separate
+cancellable worker process releases the GPU model before CPU forced alignment
+and speaker identification. TXT, SRT and MP3 outputs are unchanged.
+
+The CPU engine's compute type, batch size, and hotwords are not applicable to
+MLX. Context remains available. The MLX API does not provide the existing
+WhisperX progress callback, so during recognition the app reports the active
+stage without pretending to know its percentage. The transcript appears after
+that pass. A failed MLX download or inference automatically retries the matching CPU model (large-v3 or large-v3-turbo) in float32. Cancellation never starts a fallback. Both attempted and successful models are logged. The GPU and CPU
+engines use different segmentation and decoding, so equivalence is not assumed.
+
+The log includes ASR elapsed time and real-time factor (includes model loading,
+excludes the separate model download).
+Compare a repeat run with weights already cached on the same Mac and audio.
+Use a trusted reference transcript to measure word error rate and inspect
+speaker labels/timestamps. Hosted macOS CI validates packaging, not real GPU
+performance. On physical Apple silicon, run:
+
+```bash
+/Applications/NixScribe.app/Contents/MacOS/NixScribe --self-test-mlx
+```
+
+This checks an actual GPU operation and MLX Whisper imports. Successful inference,
+memory and accuracy benchmarks on physical hardware remain release gates.
+Parakeet remains follow-up work. Experimental Core ML diarization is separate from MLX recognition.
+
+## Model downloads
+
+Before recognition, NixScribe checks the selected speech model's files in the
+standard Hugging Face cache. A complete cached model is loaded directly without
+a new download. If files are missing, the pinned status header says
+**Downloading model**, followed by the model name. The app then shows
+**Loading model** (CPU) or **GPU recognition** when it is ready. The detailed
+log records the repository, cache hit or miss and completion. Downloads can be
+cancelled and Hugging Face can reuse files already in its cache on the next run.
+
+During downloads and other stages without a trustworthy percentage, the stage
+indicator is indeterminate rather than displaying a fake estimate. The overall
+job percentage stays at the completed processing milestone. Alignment and
+diarization models may still perform their own first-use downloads later.
 
 ## Model publishers
 
@@ -145,6 +198,59 @@ If a project with the same recording name already exists, the next one is named 
 **Save audio as MP3 (128 kbps)** is enabled by default. Audio is encoded from the original first audio stream, not the temporary transcription WAV; source metadata is not copied. **Keep a copy of the original media** is off by default. Enable it to retain the original alongside outputs; an original MP3 is never overwritten by the encoded copy. Old project folders are unchanged.
 
 NixScribe creates a temporary 16 kHz mono PCM WAV inside the job’s hidden working directory before transcription. That working WAV is removed automatically after a successful job. If a job is cancelled or fails, the incomplete project folder and its working audio are removed. The original source media is never automatically deleted.
+
+## Experimental Apple GPU speaker identification
+
+Core ML (FluidAudio) is preferred on Apple silicon; MPS and CPU remain selectable. A failed Core ML attempt retries MPS, then CPU. Explicit CPU selection remains CPU-only.
+Choose the speaker identification backend independently of speech recognition.
+The MPS and CPU options use the same Pyannote Community-1 model and Hugging Face cache.
+Single-speaker mode skips diarization altogether. Word alignment remains CPU.
+
+The experimental option uses PyTorch MPS in a separate process. A native
+crash, unavailable MPS device, unsupported operation, invalid output or empty
+speaker intervals when speech was recognized causes an explicitly logged CPU
+retry. Unsupported MPS operations are not silently redirected by PyTorch's
+fallback environment variable. Some pipeline work, such as clustering, can
+still run on CPU. The log records requested and successful device and elapsed
+time (including model loading; separate from any failed attempt).
+
+Compare CPU and GPU on identical local media and speaker counts; speed is not
+a guarantee of equal diarization accuracy. Speaker IDs may swap between runs.
+No inference or benchmarks on physical MPS hardware have been verified by CI.
+The bundled application can check actual MPS arithmetic via:
+
+```bash
+/Applications/NixScribe.app/Contents/MacOS/NixScribe --self-test-mps
+```
+
+A passing arithmetic test does not establish successful model inference.
+### Experimental Core ML (FluidAudio)
+
+The preferred option uses a bundled native Swift helper with FluidAudio v0.18.4
+(Apache-2.0, https://github.com/FluidInference/FluidAudio), pinned to that
+release with only its Diarizer trait enabled. Core ML uses all compute units
+(.all), allowing CPU, GPU and ANE scheduling; the Neural Engine is not
+guaranteed to execute every operation. First use can download separate
+model weights under ~/Library/Application Support/FluidAudio/Models.
+The models are checked offline first; audio inference is local.
+The existing Hugging Face token is still required for multi-speaker jobs
+because the fallback uses the gated Pyannote model. Exact speaker count
+is passed as a target, not a guarantee. On failure the app logs the reason
+and retries MPS, then CPU diarization. Source builds require Swift 6.2 or later
+(macOS 15+); build the helper with
+`swift build --package-path native-diarizer -c release`.
+Initial short-recording tests succeeded on an M5 Mac; longer-recording accuracy and memory benchmarks remain pending.
+The build includes FluidAudio's Apache-2.0 license.
+
+## Activity log
+
+Expand Activity log and click **Copy Activity Log** to copy the full current
+job as plain text to the macOS clipboard. The log no longer drops older
+entries at an arbitrary line limit. It remains available after completion,
+cancellation or failure until the next job starts or the app quits. The
+viewport follows new entries only while at the bottom, and polling does not
+replace selected text. Logs are not automatically uploaded or saved to disk;
+check paths and technical details before sharing them.
 
 ## Live transcription view
 
@@ -214,8 +320,18 @@ by default; turn off that option if you want a paragraph for each segment.
 SRT keeps timestamps. It normally includes speaker labels, a maximum of two
 lines, 42 characters per line, and six seconds per cue. The export controls let
 you toggle SRT speaker labels and change width, line count and cue duration.
-Cue times use WhisperX word alignment when available; if alignment is incomplete,
-NixScribe preserves the original transcript text and interpolates word timing.
+Both exports and the final preview split recognition segments at actual
+word-level speaker changes, rather than applying one dominant speaker to
+every word. When word-level labels exist but a token has no matching label,
+it is marked UNKNOWN instead of inventing an assignment. Original recognized
+words, spelling and punctuation are retained. Valid aligned word times are
+preserved; missing runs are interpolated between known boundaries.
+
+SRT can join nearby same-speaker phrases across ASR segment boundaries.
+Short cues prefer at least one second of reading time and roughly 20 spoken
+characters per second, extending only into available silence (maximum 750 ms
+of padding). Speaker boundaries, configured width/duration limits and the
+audio end take precedence. Very fast dialogue can still produce short cues.
 
 ## Readable paragraphs, progress, and Dock icon
 
@@ -246,4 +362,4 @@ require the supplied master artwork.
 - v0.4.0: multi-source time alignment, independent transcripts, auditable reconciliation and explicit uncertain differences.
 - v0.5.0: multi-model comparison and optional local language-model reconciliation, preserving the original transcript evidence. No cloud processing by default.
 
-These later stages are planned, not features of v0.2.0.
+The v0.3.0 development branch implements experimental MLX Whisper selection; Parakeet, physical-device benchmarks, and the later multi-source stages remain planned.

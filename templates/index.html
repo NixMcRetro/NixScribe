@@ -147,6 +147,15 @@
     .stage-line { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11px; }
     .smallbar { width: 58px; height: 3px; background: var(--surface-soft); border-radius: 2px; overflow: hidden; }
     .smallbar > span { display: block; height: 100%; width: 0; background: var(--accent); }
+    .progress-strip.indeterminate .smallbar { position: relative; }
+    .progress-strip.indeterminate .smallbar > span {
+      width: 40% !important; position: absolute;
+      animation: stage-wait 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes stage-wait { from { left: 0; } to { left: 60%; } }
+    @media (prefers-reduced-motion: reduce) {
+      .progress-strip.indeterminate .smallbar > span { animation: none; }
+    }
     .stats { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
     .progress-strip.running .stats { display: none; }
     .detail { margin-top: 4px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
@@ -256,6 +265,7 @@
         <button id="browseProjectsBtn" type="button">Choose…</button>
         <button id="openOutputBtn" type="button">Open</button>
       </div>
+      <div class="hint">New folders use YYYY-MM-DD Recording name.</div>
       <div class="checkline">
         <input id="saveMp3" type="checkbox" checked>
         <label for="saveMp3">Save audio as MP3 (128 kbps)</label>
@@ -273,18 +283,28 @@
       <div>
         <label for="model">Model</label>
         <select id="model">
-          {% for model_id, model_label in models %}
-          <option value="{{ model_id }}" data-repository="{{ model_repositories[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
+          {% if apple_silicon %}
+          <optgroup label="MLX Whisper - Apple GPU (preferred)">
+          {% for model_id, model_label in mlx_models %}
+          <option value="{{ model_id }}" data-engine="mlx" data-repository="{{ mlx_repositories[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
           {% endfor %}
+          </optgroup>
+          {% endif %}
+          <optgroup label="WhisperX - CPU">
+          {% for model_id, model_label in models %}
+          <option value="{{ model_id }}" data-engine="cpu" data-repository="{{ model_repositories[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
+          {% endfor %}
+          </optgroup>
         </select>
         <div class="hint">Model repository on Hugging Face:</div>
-        <div id="modelRepository" class="model-repository">{{ model_repositories[default_model] }}</div>
+        <div id="modelRepository" class="model-repository">{{ mlx_repositories.get(default_model) or model_repositories.get(default_model) }}</div>
+        <div id="engineHint" class="hint">CPU speech recognition; existing alignment and speaker identification.</div>
       </div>
       <div>
         <label for="computeType">Quality</label>
         <select id="computeType">
-          <option value="float32" selected>float32 · maximum fidelity</option>
-          <option value="int8">int8 · faster</option>
+          <option value="float32" selected>float32 - maximum fidelity</option>
+          <option value="int8">int8 - faster</option>
         </select>
       </div>
       <div>
@@ -303,6 +323,15 @@
           <option value="10">10 speakers</option>
         </select>
         <div class="hint">Choose the exact count when known. One speaker skips diarization.</div>
+        <label for="diarizationDevice" style="margin-top:12px">Speaker identification</label>
+        <select id="diarizationDevice">
+          {% if apple_silicon %}
+          <option value="coreml" {% if default_diarization_device == 'coreml' %}selected{% endif %}>Core ML (preferred)</option>
+          <option value="mps">Apple GPU (Pyannote)</option>
+          {% endif %}
+          <option value="cpu" {% if default_diarization_device == 'cpu' %}selected{% endif %}>CPU (Pyannote)</option>
+        </select>
+        <div id="diarizationHint" class="hint">Independent of the transcription model.</div>
       </div>
     </div>
 
@@ -400,7 +429,12 @@
   <section class="card">
     <details id="logDetails">
       <summary>Activity log</summary>
-      <div id="log" class="terminal">Waiting.</div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button id="copyLogBtn" type="button" disabled>Copy Activity Log</button>
+        <span id="copyLogStatus" class="hint" role="status" aria-live="polite"></span>
+      </div>
+      <div id="log" class="terminal" tabindex="0">Waiting.</div>
+      <div class="hint">The complete current job is retained until you start another transcription or quit NixScribe.</div>
     </details>
   </section>
 
@@ -435,9 +469,31 @@ let lastJobStatus = 'Idle';
 function updateModelRepository() {
   const option = $('model').selectedOptions[0];
   $('modelRepository').textContent = option ? option.dataset.repository : '';
+  const isMLX = option?.dataset.engine === 'mlx';
+  $('computeType').disabled = isMLX;
+  $('batchSize').disabled = isMLX;
+  $('hotwords').disabled = isMLX;
+  $('engineHint').textContent = isMLX
+    ? 'Apple GPU recognition (FP16). Automatically retries the equivalent CPU model if needed. Word alignment uses CPU. Use Context for names; CPU settings do not apply to MLX. Live transcript appears after decoding.'
+    : 'CPU speech recognition; existing alignment and speaker identification.';
 }
 $('model').addEventListener('change', updateModelRepository);
 updateModelRepository();
+
+function updateDiarizationDevice() {
+  const single = $('speakerCount').value === '1';
+  $('diarizationDevice').disabled = single;
+  $('diarizationHint').textContent = single
+    ? 'One speaker skips speaker identification.'
+    : $('diarizationDevice').value === 'mps'
+      ? 'Uses Pyannote on the Apple GPU. Retries on CPU if needed.'
+      : $('diarizationDevice').value === 'coreml'
+        ? 'FluidAudio uses CPU, GPU and Neural Engine as available. Separate first-use model download. Retries on Apple GPU, then CPU if needed.'
+        : 'Independent of the transcription model.';
+}
+$('speakerCount').addEventListener('change', updateDiarizationDevice);
+$('diarizationDevice').addEventListener('change', updateDiarizationDevice);
+updateDiarizationDevice();
 
 function fmtTime(seconds) {
   seconds = Math.max(0, Math.floor(Number(seconds || 0)));
@@ -460,7 +516,7 @@ function updateSourceSummary() {
     return;
   }
   $('sourceName').textContent = basename(path);
-  $('sourceMeta').textContent = 'Audio or video source · NixScribe will prepare a temporary 16 kHz mono WAV';
+  $('sourceMeta').textContent = 'Audio or video source - NixScribe creates a temporary 16 kHz mono WAV. Your original recording is unchanged.';
 }
 
 function setStatusPill(status, running) {
@@ -568,12 +624,17 @@ async function poll() {
     if (status !== lastJobStatus && (s.running || status === 'Complete' || status === 'Cancelled')) {
       $('formError').textContent = '';
     }
+    if (s.running && !['Starting', 'Running'].includes(lastJobStatus)) {
+      $('copyLogStatus').textContent = '';
+    }
     lastJobStatus = status;
     const progress = $('progressCard');
     progress.classList.toggle('hidden', status === 'Idle' && !s.running);
     progress.classList.toggle('running', !!s.running);
     progress.classList.toggle('complete', status === 'Complete');
     progress.classList.toggle('failed', status === 'Error');
+    const indeterminate = !!s.running && ['Checking model', 'Downloading model', 'Loading model', 'GPU recognition', 'Loading diarization'].includes(s.stage);
+    progress.classList.toggle('indeterminate', indeterminate);
 
     $('phase').textContent = s.stage === 'Idle' ? 'Ready' : (s.stage || 'Ready');
     $('status').textContent = s.status && s.status !== s.stage && s.status !== 'Running' ? s.status : '';
@@ -581,7 +642,7 @@ async function poll() {
     $('overallPercent').textContent = `${op.toFixed(1)}%`;
     $('overallBar').style.width = `${op}%`;
     $('overallTrack').setAttribute('aria-valuenow', String(op));
-    $('stagePercent').textContent = `${sp.toFixed(1)}%`;
+    $('stagePercent').textContent = indeterminate ? '…' : `${sp.toFixed(1)}%`;
     $('stageBar').style.width = `${sp}%`;
     $('elapsed').textContent = `Elapsed ${fmtTime(s.elapsed_seconds)}`;
     $('projectPath').textContent = s.project_dir ? `Project ${s.project_dir}` : 'Project —';
@@ -598,8 +659,19 @@ async function poll() {
       $('livePreview').scrollTop = $('livePreview').scrollHeight;
     }
 
-    $('log').textContent = (s.log && s.log.length) ? s.log.join('\n') : 'Waiting.';
-    $('log').scrollTop = $('log').scrollHeight;
+    const logEntries = s.log || [];
+    const logText = logEntries.length ? logEntries.join('\n') : 'Waiting.';
+    const logNode = $('log');
+    const selection = window.getSelection();
+    const selectingLog = selection && !selection.isCollapsed &&
+      (logNode.contains(selection.anchorNode) || logNode.contains(selection.focusNode));
+    if (logNode.textContent !== logText && !selectingLog) {
+      const atBottom = logNode.scrollHeight - logNode.scrollTop - logNode.clientHeight < 24;
+      const previousTop = logNode.scrollTop;
+      logNode.textContent = logText;
+      logNode.scrollTop = atBottom ? logNode.scrollHeight : previousTop;
+    }
+    $('copyLogBtn').disabled = !logEntries.length;
     $('startBtn').disabled = !!s.running || startingJob;
     $('cancelBtn').disabled = !s.running;
     $('quitBtn').disabled = !!s.running;
@@ -629,6 +701,25 @@ async function poll() {
     $('detail').textContent = `UI connection error: ${e.message}`;
   }
 }
+
+$('copyLogBtn').addEventListener('click', async () => {
+  const feedback = $('copyLogStatus');
+  try {
+    await jsonFetch('/api/log/copy', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-NixScribe-Action': 'copy-log'},
+      body: '{}'
+    });
+    feedback.textContent = 'Copied to clipboard.';
+  } catch (error) {
+    const range = document.createRange();
+    range.selectNodeContents($('log'));
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    feedback.textContent = 'Log selected. Press Command-C to copy.';
+  }
+});
 
 $('browseBtn').addEventListener('click', async () => {
   $('formError').textContent = '';
@@ -672,13 +763,14 @@ $('startBtn').addEventListener('click', async () => {
     compute_type: $('computeType').value,
     batch_size: Number($('batchSize').value),
     speaker_count: $('speakerCount').value,
+    diarization_device: $('diarizationDevice').disabled ? 'cpu' : $('diarizationDevice').value,
     txt_group_turns: $('txtGroupTurns').checked,
     srt_speaker_labels: $('srtSpeakerLabels').checked,
     srt_chars_per_line: Number($('srtWidth').value),
     srt_max_lines: Number($('srtLines').value),
     srt_max_duration: Number($('srtDuration').value),
     initial_prompt: $('initialPrompt').value.trim(),
-    hotwords: $('hotwords').value.trim(),
+    hotwords: $('hotwords').disabled ? '' : $('hotwords').value.trim(),
   };
   try {
     await jsonFetch('/api/start', {

@@ -51,6 +51,16 @@ python assets/make_icon.py
 export WHISPERX_BUNDLED_FFMPEG="$FFMPEG"
 export WHISPERX_BUNDLED_FFPROBE="$FFPROBE"
 
+# Compile the native helper with only the diarization trait enabled.
+swift build --package-path "$HERE/native-diarizer" -c release --product NixScribeDiarizer
+NATIVE_BIN="$(swift build --package-path "$HERE/native-diarizer" -c release --show-bin-path)"
+export NIXSCRIBE_DIARIZER="$NATIVE_BIN/NixScribeDiarizer"
+"$NIXSCRIBE_DIARIZER" --self-test
+FLUID_SOURCE="$(find "$HERE/native-diarizer/.build/checkouts" -maxdepth 1 -iname 'fluidaudio' -print -quit)"
+test -n "$FLUID_SOURCE"
+export NIXSCRIBE_FLUID_LICENSE="$FLUID_SOURCE/LICENSE"
+test -s "$NIXSCRIBE_FLUID_LICENSE"
+
 python -m PyInstaller --noconfirm --clean NixScribe.spec
 
 APP="$HERE/dist/NixScribe.app"

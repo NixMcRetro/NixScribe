@@ -34,7 +34,7 @@ jobs:
       - name: Install ffmpeg
         run: brew install ffmpeg
 
-      - name: Test transcript formatting, model options and audio export
+      - name: Test formatting, models, cache handling and audio export
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
       - name: Require supplied icon for stable releases
@@ -57,6 +57,17 @@ jobs:
       - name: Verify packaged ML backend API
         run: |
           "dist/NixScribe.app/Contents/MacOS/NixScribe" --self-test-backend
+
+      - name: Verify bundled MLX package and Metal shaders
+        run: |
+          "dist/NixScribe.app/Contents/MacOS/NixScribe" --self-test-mlx-package
+
+      - name: Verify bundled FluidAudio helper and license
+        run: |
+          HELPER="dist/NixScribe.app/Contents/Resources/bin/NixScribeDiarizer"
+          file "$HELPER" | grep -q arm64
+          "$HELPER" --self-test
+          test -s "dist/NixScribe.app/Contents/Resources/licenses/FluidAudio/LICENSE"
 
       - name: Verify frozen native macOS imports
         run: |
@@ -82,6 +93,11 @@ jobs:
               grep -q 'class="progress-strip hidden"' /tmp/nixscribe-index.html
               grep -q 'data-repository="mobiuslabsgmbh/faster-whisper-large-v3-turbo"' /tmp/nixscribe-index.html
               grep -q 'data-repository="distil-whisper/distil-large-v3.5-ct2"' /tmp/nixscribe-index.html
+              grep -q 'data-repository="mlx-community/whisper-large-v3-mlx"' /tmp/nixscribe-index.html
+              grep -q 'data-repository="mlx-community/whisper-large-v3-turbo"' /tmp/nixscribe-index.html
+              grep -q 'id="diarizationDevice"' /tmp/nixscribe-index.html
+              grep -q 'value="coreml" selected' /tmp/nixscribe-index.html
+              grep -q 'value="mlx-large-v3".*selected' /tmp/nixscribe-index.html
               echo "Frozen NixScribe app launched and served its UI successfully."
               exit 0
             fi
