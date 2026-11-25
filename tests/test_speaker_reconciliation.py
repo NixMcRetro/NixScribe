@@ -1,7 +1,7 @@
 """Synthetic speaker reconciliation tests; no models or recordings."""
 import unittest
 
-from speaker_reconciliation import reconcile
+from speaker_reconciliation import reconcile, apply_reconciliation
 
 
 def interval(start, end, speaker):
@@ -58,6 +58,15 @@ class ReconciliationTests(unittest.TestCase):
         d = reconcile(a, b, [word(2, 2.1)])["decisions"][0]
         self.assertEqual(d["speaker"], "B")
         self.assertEqual(d["reason"], "mps_full_coreml_partial")
+
+    def test_application_preserves_text_and_timing(self):
+        source = {"segments": [{"text": "Example extra", "start": 0, "end": 1,
+                                "words": [word(0.1, 0.2)]}]}
+        apply_reconciliation(source, [interval(0, 1, "A")], [interval(0, 1, "X")])
+        segment = source["segments"][0]
+        self.assertEqual(segment["text"], "Example extra")
+        self.assertEqual(segment["words"], [{**word(0.1, 0.2), "speaker": "A"}])
+        self.assertEqual(segment["speaker"], "UNKNOWN")
 
     def test_cancel(self):
         def cancel():

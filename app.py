@@ -6,6 +6,7 @@ import gc
 import getpass
 import importlib.metadata
 import json
+import math
 import os
 import re
 import shutil
@@ -28,7 +29,9 @@ from model_cache import prepare_model, repository_for
 from audio_export import export_mp3, mp3_destination
 from project_paths import create_project_dir
 from diarization_backend import (DEVICES as DIARIZATION_DEVICES, default_device,
-                                 run_coreml, run_mps, fallback_devices)
+                                 run_coreml, run_mps, fallback_devices, validate_intervals)
+from speaker_reconciliation import apply_reconciliation
+from diarization_diagnostics import write_diagnostics
 
 APP_HOST = "127.0.0.1"
 APP_PORT = int(os.environ.get("WHISPERX_UI_PORT", "8765"))
@@ -760,6 +763,7 @@ def _run_job(config: dict[str, Any]) -> None:
         _torch_cleanup(torch)
         _cancel_if_requested()
 
+        align_started = time.monotonic()
         _update(
             stage="Loading aligner",
             detail="Loading English forced-alignment model…",
@@ -795,6 +799,28 @@ def _run_job(config: dict[str, Any]) -> None:
         _torch_cleanup(torch)
         _cancel_if_requested()
 
+        align_elapsed = time.monotonic() - align_started
+        requested_device = config.get("diarization_device", default_device())
+        combined = requested_device == "combined"
+        actual_device = "single"
+        raw_intervals = {}
+        attempts = []
+        comparison = None
+        aligned_words = [word for seg in result.get("segments", []) for word in seg.get("words", [])]
+        diagnostics = config.get("save_diagnostics", False)
+        if diagnostics:
+            # Only transcript fields, never configuration, paths, tokens or exception text.
+            def finite_time(value):
+                try:
+                    value = float(value)
+                    return value if math.isfinite(value) else None
+                except (ValueError, TypeError, OverflowError):
+                    return None
+            aligned_snapshot = [{"word": str(w.get("word", "")),
+                                 "start": finite_time(w.get("start")),
+                                 "end": finite_time(w.get("end"))} for w in aligned_words]
+        diarize_total_started = time.monotonic()
+
         if speaker_count == 1:
             _update(
                 stage="Assigning speaker",
@@ -810,7 +836,6 @@ def _run_job(config: dict[str, Any]) -> None:
             _update(stage_percent=100.0, overall_percent=97.0)
             _append_log("Single-speaker mode: pyannote diarization skipped")
         else:
-            requested_device = config.get("diarization_device", default_device())
             candidates = fallback_devices(requested_device)
             actual_device = requested_device
             diarize_started = time.monotonic()
@@ -831,7 +856,7 @@ def _run_job(config: dict[str, Any]) -> None:
                     elif phase == "inference":
                         stage_callback("Identifying speakers",
                                        "Detecting speaker turns with Core ML…",
-                                       84.0, 97.0)(percent)
+                                       84.0, 89.0 if combined else 97.0)(percent)
 
                 try:
                     import pandas as pd
@@ -843,6 +868,11 @@ def _run_job(config: dict[str, Any]) -> None:
                     if not intervals and result.get("segments"):
                         raise RuntimeError("Core ML returned no speaker intervals for recognized speech")
                     diarize_segments = pd.DataFrame(intervals, columns=["start", "end", "speaker"])
+                    actual_device = "coreml"
+                    if combined or diagnostics:
+                        raw_intervals["coreml"] = intervals
+                        attempts.append({"device": "coreml", "status": "success",
+                                         "seconds": time.monotonic() - diarize_started})
                     _append_log("Experimental FluidAudio Core ML diarization completed")
                     if speaker_count is not None and len({r["speaker"] for r in intervals}) != speaker_count:
                         _append_log("Warning: FluidAudio did not return the requested exact speaker count")
@@ -850,16 +880,22 @@ def _run_job(config: dict[str, Any]) -> None:
                     raise
                 except Exception as exc:
                     _cancel_if_requested()
+                    if combined or diagnostics:
+                        attempts.append({"device": "coreml", "status": "failed",
+                                         "seconds": time.monotonic() - diarize_started,
+                                         "error_type": type(exc).__name__})
                     _append_log(f"Core ML diarization failed: {type(exc).__name__}: {exc}")
                     _append_log(f"Core ML attempt elapsed: {time.monotonic() - diarize_started:.1f}s")
                     _append_log("Retrying speaker diarization with Pyannote on Apple GPU (MPS); Core ML output discarded")
                     actual_device = "mps"
                     diarize_started = time.monotonic()
 
-            if diarize_segments is None and "mps" in candidates:
+            if (diarize_segments is None or combined) and "mps" in candidates:
+                _cancel_if_requested()
+                diarize_started = time.monotonic()
                 _update(stage="Loading diarization",
                         detail="Loading Pyannote Community-1 on Apple GPU (experimental)…",
-                        stage_percent=0.0, overall_percent=83.0)
+                        stage_percent=0.0, overall_percent=89.0 if combined else 83.0)
                 _append_log("Speaker diarization attempt - Pyannote Community-1 (Apple GPU / MPS)")
 
                 def mps_progress(phase: str, percent: float) -> None:
@@ -867,7 +903,7 @@ def _run_job(config: dict[str, Any]) -> None:
                         return
                     stage_callback("Identifying speakers",
                                    "Detecting speaker turns on Apple GPU…",
-                                   84.0, 97.0)(percent)
+                                   89.0 if combined else 84.0, 97.0)(percent)
 
                 try:
                     import pandas as pd
@@ -876,21 +912,35 @@ def _run_job(config: dict[str, Any]) -> None:
                     if not intervals and result.get("segments"):
                         raise RuntimeError("GPU diarization returned no speaker intervals for recognized speech")
                     diarize_segments = pd.DataFrame(intervals, columns=["start", "end", "speaker"])
+                    actual_device = "combined" if combined and "coreml" in raw_intervals else "mps"
+                    if combined or diagnostics:
+                        raw_intervals["mps"] = intervals
+                        attempts.append({"device": "mps", "status": "success",
+                                         "seconds": time.monotonic() - diarize_started})
                     _append_log("Experimental MPS diarization completed")
                 except JobCancelled:
                     raise
                 except Exception as exc:
                     _cancel_if_requested()
+                    if combined or diagnostics:
+                        attempts.append({"device": "mps", "status": "failed",
+                                         "seconds": time.monotonic() - diarize_started,
+                                         "error_type": type(exc).__name__})
                     _append_log(f"GPU diarization failed: {type(exc).__name__}: {exc}")
                     _append_log(f"MPS attempt elapsed: {time.monotonic() - diarize_started:.1f}s")
-                    _append_log("Retrying speaker diarization on CPU; GPU output discarded")
-                    actual_device = "cpu"
-                    diarize_started = time.monotonic()
-                    _update(stage="Loading diarization",
-                            detail="Apple GPU unavailable or failed. Retrying on CPU…",
-                            stage_percent=0.0, overall_percent=83.0)
+                    if diarize_segments is not None:
+                        actual_device = "coreml"
+                    else:
+                        _append_log("Retrying speaker diarization on CPU; GPU output discarded")
+                        actual_device = "cpu"
+                        _update(stage="Loading diarization",
+                                detail="Apple GPU unavailable or failed. Retrying on CPU…",
+                                stage_percent=0.0, overall_percent=83.0)
 
             if diarize_segments is None:
+                _cancel_if_requested()
+                actual_device = "cpu"
+                diarize_started = time.monotonic()
                 _update(stage="Loading diarization",
                         detail="Loading Pyannote Community-1 on CPU…",
                         stage_percent=0.0, overall_percent=83.0)
@@ -913,14 +963,27 @@ def _run_job(config: dict[str, Any]) -> None:
                     diarize_kwargs["num_speakers"] = speaker_count
                 diarize_segments = diarize_model(str(working_input), **diarize_kwargs)
                 del diarize_model
-            diarize_elapsed = time.monotonic() - diarize_started
+                if diagnostics:
+                    raw_intervals["cpu"] = validate_intervals(
+                        diarize_segments[["start", "end", "speaker"]].to_dict(orient="records"))
+                    attempts.append({"device": "cpu", "status": "success",
+                                     "seconds": time.monotonic() - diarize_started})
+            diarize_elapsed = time.monotonic() - diarize_total_started
             _append_log(f"Diarization elapsed: {diarize_elapsed:.1f}s "
                         f"(device={actual_device}, requested={requested_device}; includes model loading)")
-            result = whisperx.assign_word_speakers(
-                diarize_segments,
-                result,
-                fill_nearest=True,
-            )
+            if actual_device == "combined":
+                comparison = apply_reconciliation(result, raw_intervals["coreml"],
+                                                  raw_intervals["mps"], _cancel_if_requested)
+                _append_log(f"Combined speaker assignment: {sum(d['uncertain'] for d in comparison['decisions'])} "
+                            f"uncertain word decisions of {len(comparison['decisions'])}")
+            else:
+                if combined:
+                    _append_log(f"Combined mode degraded to {actual_device}; only one engine available")
+                result = whisperx.assign_word_speakers(
+                    diarize_segments,
+                    result,
+                    fill_nearest=True,
+                )
             _torch_cleanup(torch)
             _cancel_if_requested()
 
@@ -966,6 +1029,38 @@ def _run_job(config: dict[str, Any]) -> None:
         _update(stage_percent=85.0, overall_percent=99.2)
 
         output_files = [str(txt_path), str(srt_path)]
+        if diagnostics:
+            _cancel_if_requested()
+            def package_version(name):
+                try:
+                    return importlib.metadata.version(name)
+                except importlib.metadata.PackageNotFoundError:
+                    return None
+
+            try:
+                final_words = [w for seg in result.get("segments", []) for w in seg.get("words", [])]
+                diagnostic_path = write_diagnostics(project_dir / "speaker-diagnostics.json", {
+                    "app_version": VERSION,
+                    "recognition": {"requested": requested_model, "actual": model_id,
+                                    "repository": repository},
+                    "speaker_identification": {"requested": requested_device, "actual": actual_device,
+                                               "requested_count": speaker_count,
+                                               "degraded": combined and actual_device not in ("combined", "single")},
+                    "versions": {"whisperx": wx_ver, "torch": str(torch.__version__),
+                                 "pyannote.audio": package_version("pyannote.audio"),
+                                 "mlx-whisper": package_version("mlx-whisper"), "FluidAudio": "0.18.4"},
+                    "models": {"pyannote": "pyannote/speaker-diarization-community-1",
+                               "FluidAudio": "OfflineDiarizerModels (default fidelity)"},
+                    "seconds": {"audio": audio_seconds, "asr": asr_elapsed, "alignment": align_elapsed,
+                                "diarization": diarize_elapsed if speaker_count != 1 else 0.0},
+                    "attempts": attempts, "aligned_words": aligned_snapshot,
+                    "raw_intervals": raw_intervals, "reconciliation": comparison,
+                    "assigned_speakers": [w.get("speaker", "UNKNOWN") for w in final_words],
+                })
+                output_files.append(str(diagnostic_path))
+                _append_log("Private speaker diagnostics written to project folder")
+            except Exception as exc:
+                _append_log(f"Diagnostic export failed ({type(exc).__name__}); TXT and SRT retained")
         if mp3_path is not None:
             output_files.append(str(mp3_path))
         preview = txt_path.read_text(encoding="utf-8", errors="replace")
@@ -1230,6 +1325,7 @@ def start_job():
         "threads": max(0, min(32, int(payload.get("threads", 0)))),
         "speaker_count": speaker_count,
         "diarization_device": str(payload.get("diarization_device", default_device())),
+        "save_diagnostics": payload.get("save_diagnostics", False) is True,
         "txt_group_turns": payload.get("txt_group_turns", True) is True,
         "srt_speaker_labels": payload.get("srt_speaker_labels", True) is True,
         "srt_chars_per_line": srt_width,
@@ -1241,6 +1337,8 @@ def start_job():
 
     if config["diarization_device"] not in DIARIZATION_DEVICES:
         return jsonify({"ok": False, "error": "Unsupported speaker identification device."}), 400
+    if config["diarization_device"] == "combined" and not apple_silicon():
+        return jsonify({"ok": False, "error": "Combined speaker identification requires Apple silicon."}), 400
     if config["model"] not in ALL_MODEL_IDS:
         return jsonify({"ok": False, "error": "Unsupported model selection."}), 400
     if config["model"] in MLX_REPOSITORIES:

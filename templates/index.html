@@ -326,7 +326,8 @@
         <label for="diarizationDevice" style="margin-top:12px">Speaker identification</label>
         <select id="diarizationDevice">
           {% if apple_silicon %}
-          <option value="coreml" {% if default_diarization_device == 'coreml' %}selected{% endif %}>Core ML (preferred)</option>
+          <option value="coreml" {% if default_diarization_device == 'coreml' %}selected{% endif %}>Core ML (Fast)</option>
+          <option value="combined">Combined (Accuracy - experimental)</option>
           <option value="mps">Apple GPU (Pyannote)</option>
           {% endif %}
           <option value="cpu" {% if default_diarization_device == 'cpu' %}selected{% endif %}>CPU (Pyannote)</option>
@@ -348,6 +349,10 @@
 
     <details class="advanced">
       <summary>Advanced settings</summary>
+      <div class="checkline">
+        <input id="saveDiagnostics" type="checkbox">
+        <label for="saveDiagnostics">Save private speaker diagnostics (JSON includes transcript words)</label>
+      </div>
       <div style="max-width:220px;margin-top:12px">
         <label for="batchSize">Batch size</label>
         <select id="batchSize">
@@ -485,7 +490,9 @@ function updateDiarizationDevice() {
   $('diarizationDevice').disabled = single;
   $('diarizationHint').textContent = single
     ? 'One speaker skips speaker identification.'
-    : $('diarizationDevice').value === 'mps'
+    : $('diarizationDevice').value === 'combined'
+      ? 'Runs FluidAudio then Pyannote on Apple GPU. Slower; accuracy improvement is not yet validated.'
+      : $('diarizationDevice').value === 'mps'
       ? 'Uses Pyannote on the Apple GPU. Retries on CPU if needed.'
       : $('diarizationDevice').value === 'coreml'
         ? 'FluidAudio uses CPU, GPU and Neural Engine as available. Separate first-use model download. Retries on Apple GPU, then CPU if needed.'
@@ -764,6 +771,7 @@ $('startBtn').addEventListener('click', async () => {
     batch_size: Number($('batchSize').value),
     speaker_count: $('speakerCount').value,
     diarization_device: $('diarizationDevice').disabled ? 'cpu' : $('diarizationDevice').value,
+    save_diagnostics: $('saveDiagnostics').checked,
     txt_group_turns: $('txtGroupTurns').checked,
     srt_speaker_labels: $('srtSpeakerLabels').checked,
     srt_chars_per_line: Number($('srtWidth').value),

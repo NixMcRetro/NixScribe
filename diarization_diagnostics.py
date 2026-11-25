@@ -11,7 +11,7 @@ def write_diagnostics(path: Path, data: dict) -> Path:
     temporary = Path(name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
-            json.dump({"schema_version": 1, **data}, stream, ensure_ascii=False,
+            json.dump({**data, "schema_version": 1}, stream, ensure_ascii=False,
                       allow_nan=False, indent=2)
             stream.write("\n")
         os.link(temporary, path)

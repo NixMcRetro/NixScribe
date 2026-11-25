@@ -132,3 +132,16 @@ def reconcile(coreml, mps, words, check_cancel=lambda: None):
         decisions.append({"speaker": speaker, "reason": reason,
                           "coreml_overlap": a, "mps_overlap": b, "uncertain": uncertain})
     return {"mapping": mapping, "mapping_overlap_seconds": overlaps, "decisions": decisions}
+
+
+def apply_reconciliation(result, coreml, mps, check_cancel=lambda: None):
+    """Assign only speaker labels; leave ASR text and timing intact."""
+    words = [word for segment in result.get("segments", []) for word in segment.get("words", [])]
+    comparison = reconcile(coreml, mps, words, check_cancel)
+    check_cancel()
+    for word, decision in zip(words, comparison["decisions"]):
+        word["speaker"] = decision["speaker"]
+    # Untimed/unmatched words must not inherit a guessed segment speaker.
+    for segment in result.get("segments", []):
+        segment["speaker"] = "UNKNOWN"
+    return comparison

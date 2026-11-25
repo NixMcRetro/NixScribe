@@ -16,7 +16,7 @@ import tempfile
 from typing import Any, Callable
 
 REPOSITORY = "pyannote/speaker-diarization-community-1"
-DEVICES = frozenset(("cpu", "mps", "coreml"))
+DEVICES = frozenset(("cpu", "mps", "coreml", "combined"))
 
 
 def default_device() -> str:
@@ -28,6 +28,7 @@ def fallback_devices(requested: str) -> tuple[str, ...]:
     """Keep explicit CPU selections on CPU; progressively retry accelerated jobs."""
     return {
         "coreml": ("coreml", "mps", "cpu"),
+        "combined": ("coreml", "mps", "cpu"),
         "mps": ("mps", "cpu"),
         "cpu": ("cpu",),
     }[requested]
