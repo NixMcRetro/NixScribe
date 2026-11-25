@@ -282,12 +282,12 @@
       <div>
         <label for="model">Model</label>
         <select id="model">
-          <optgroup label="WhisperX · CPU">
+          <optgroup label="WhisperX - CPU">
           {% for model_id, model_label in models %}
           <option value="{{ model_id }}" data-engine="cpu" data-repository="{{ model_repositories[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
           {% endfor %}
           </optgroup>
-          <optgroup label="MLX Whisper · Apple GPU (experimental)">
+          <optgroup label="MLX Whisper - Apple GPU (experimental)">
           {% for model_id, model_label in mlx_models %}
           <option value="{{ model_id }}" data-engine="mlx" data-repository="{{ mlx_repositories[model_id] }}">{{ model_label }}</option>
           {% endfor %}
@@ -300,8 +300,8 @@
       <div>
         <label for="computeType">Quality</label>
         <select id="computeType">
-          <option value="float32" selected>float32 · maximum fidelity</option>
-          <option value="int8">int8 · faster</option>
+          <option value="float32" selected>float32 - maximum fidelity</option>
+          <option value="int8">int8 - faster</option>
         </select>
       </div>
       <div>
@@ -484,7 +484,7 @@ function updateSourceSummary() {
     return;
   }
   $('sourceName').textContent = basename(path);
-  $('sourceMeta').textContent = 'Audio or video source · NixScribe will prepare a temporary 16 kHz mono WAV';
+  $('sourceMeta').textContent = 'Audio or video source - NixScribe creates a temporary 16 kHz mono WAV. Your original recording is unchanged.';
 }
 
 function setStatusPill(status, running) {

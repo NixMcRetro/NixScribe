@@ -473,7 +473,7 @@ def _extract_audio_to_wav(source: Path, destination: Path) -> None:
         "-loglevel",
         "error",
         "-nostdin",
-        "-y",
+        "-n",
         "-i",
         str(source),
         "-map",
@@ -576,8 +576,11 @@ def _run_job(config: dict[str, Any]) -> None:
             raise FileNotFoundError(f"Media file not found: {input_path}")
 
         projects_dir.mkdir(parents=True, exist_ok=True)
-        project_dir = _unique_project_dir(projects_dir, input_path.stem)
-        project_dir.mkdir(parents=False, exist_ok=False)
+        # Only mark the folder as ours after exclusive creation succeeds.
+        # If another process creates the candidate first, never clean up its files.
+        candidate = _unique_project_dir(projects_dir, input_path.stem)
+        candidate.mkdir(parents=False, exist_ok=False)
+        project_dir = candidate
         _update(projects_dir=str(projects_dir), project_dir=str(project_dir))
         _append_log(f"Project: {project_dir}")
 

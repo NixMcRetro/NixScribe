@@ -13,14 +13,14 @@ MODEL_REPOSITORIES = {
     "tiny.en": "Systran/faster-whisper-tiny.en",
 }
 MODELS = (
-    ("large-v3", "large-v3 · Systran"),
-    ("large-v3-turbo", "large-v3-turbo · Mobius Labs"),
-    ("distil-large-v3.5", "distil-large-v3.5 · Distil-Whisper"),
-    ("distil-large-v3", "distil-large-v3 · Systran"),
-    ("medium.en", "medium.en · Systran"),
-    ("small.en", "small.en · Systran"),
-    ("base.en", "base.en · Systran"),
-    ("tiny.en", "tiny.en · Systran"),
+    ("large-v3", "large-v3 - Systran"),
+    ("large-v3-turbo", "large-v3-turbo - Mobius Labs"),
+    ("distil-large-v3.5", "distil-large-v3.5 - Distil-Whisper"),
+    ("distil-large-v3", "distil-large-v3 - Systran"),
+    ("medium.en", "medium.en - Systran"),
+    ("small.en", "small.en - Systran"),
+    ("base.en", "base.en - Systran"),
+    ("tiny.en", "tiny.en - Systran"),
 )
 DEFAULT_MODEL = "large-v3"
 MODEL_IDS = frozenset(model for model, _ in MODELS)
@@ -31,7 +31,7 @@ MLX_REPOSITORIES = {
     "mlx-large-v3-turbo": "mlx-community/whisper-large-v3-turbo",
 }
 MLX_MODELS = (
-    ("mlx-large-v3", "large-v3 · MLX Community"),
-    ("mlx-large-v3-turbo", "large-v3-turbo · MLX Community"),
+    ("mlx-large-v3", "large-v3 - MLX Community"),
+    ("mlx-large-v3-turbo", "large-v3-turbo - MLX Community"),
 )
 ALL_MODEL_IDS = MODEL_IDS | frozenset(MLX_REPOSITORIES)
