@@ -125,5 +125,21 @@ clustering. This is a research experiment, not an app feature. A separate local
 scoring step must compare the resulting intervals against saved aligned words.
 Share only the aggregate probe-report.json for public development clips. Keep
 private-inference.npz and private-intervals.json outside the repository and
-locally protected; they contain voice-derived data. Cross-process replay of the
-NPZ is not implemented in this first probe. No test-set tuning.
+locally protected; they contain voice-derived data. No test-set tuning.
+
+To verify a previous v1 capture across processes, use the same audio and model
+snapshot with a new output directory:
+
+    /path/to/NixScribe.app/Contents/MacOS/NixScribe --clustering-probe \
+      --audio /path/to/recording.wav --replay-cache /path/to/old-probe \
+      --output /path/to/new-replay
+
+This loads the cached NPZ without pickle, verifies recorded identity, byte size,
+shapes, window and numeric values, and replays every original setting through
+upstream reconstruction. Both neural stage methods are fail-closed. Every
+regular/exclusive interval must match the saved capture exactly. Model loading
+and audio decoding still occur; no neural inference or ASR is run. Old v1
+captures lack a stored cache checksum and centroids, so the new report records
+the cache hash but cannot authenticate original array bytes or compare saved
+centroids. Keep the original cache and intervals local. No parameter changes
+until physical disk replay passes across the development set.

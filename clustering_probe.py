@@ -53,12 +53,88 @@ def sha(path):
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
+def verify_identity(report, expected):
+    for key, value in expected.items():
+        if report.get(key) != value:
+            raise ValueError(f"Cache identity mismatch: {key}")
+
+
+def replay_cache(directory, output, identity, p, waveform, sample_rate):
+    """Load a v1 capture and fail closed before trying any fresh inference."""
+    import numpy as np
+    import torch
+    from pyannote.core import SlidingWindow, SlidingWindowFeature
+
+    started = time.perf_counter()
+    original = json.loads((directory / "probe-report.json").read_text())
+    verify_identity(original, dict(identity, schema_version=1, exact_cached_baseline=True))
+    original_rows = json.loads((directory / "private-intervals.json").read_text())
+    path = directory / "private-inference.npz"
+    if path.stat().st_size != original["cache_bytes"]:
+        raise ValueError("Cache byte size mismatch")
+    with np.load(path, allow_pickle=False) as cache:
+        if set(cache.files) != {"segmentation", "embeddings", "window"}:
+            raise ValueError("Unexpected cache fields")
+        s, e, window = (cache[k] for k in ("segmentation", "embeddings", "window"))
+    if (s.ndim != 3 or e.ndim != 3 or s.shape[0] == 0
+            or e.shape[:2] != (s.shape[0], s.shape[2])
+            or list(s.shape) != original["segmentation_shape"]
+            or list(e.shape) != original["embedding_shape"]
+            or window.shape != (3,) or window.tolist() != original["window_seconds"]
+            or not np.isfinite(window).all() or min(window[1:]) <= 0
+            or not np.issubdtype(s.dtype, np.number)
+            or not np.issubdtype(e.dtype, np.floating)
+            or not np.isfinite(s).all() or not np.isin(s, (0, 1)).all()
+            or np.isinf(e).any() or not np.isfinite(e).any()):
+        raise ValueError("Invalid cached arrays")
+    if e.shape[2] != p._embedding.dimension:
+        raise ValueError("Embedding dimension mismatch")
+    segmentations = SlidingWindowFeature(
+        s, SlidingWindow(start=float(window[0]), duration=float(window[1]), step=float(window[2])))
+    def forbidden(*args, **kwargs):
+        raise RuntimeError("Neural inference forbidden during disk replay")
+    seg, emb = Memo(forbidden), Memo(forbidden)
+    seg.value, emb.value = segmentations, e
+    load_seconds = time.perf_counter() - started
+    trials = []
+    with patch.object(p, "get_segmentations", seg), patch.object(p, "get_embeddings", emb):
+        for trial in original["trials"]:
+            name = trial["name"]
+            settings = trial["settings"]
+            before = time.perf_counter()
+            with torch.inference_mode():
+                out = p({"waveform": waveform, "sample_rate": sample_rate}, **settings)
+            torch.mps.synchronize()
+            actual = {
+                "regular": [list(row) for row in rows(out.speaker_diarization)],
+                "exclusive": [list(row) for row in rows(out.exclusive_speaker_diarization)],
+            }
+            if actual != original_rows[name]:
+                raise RuntimeError(f"Disk replay interval mismatch: {name}")
+            trials.append(dict(name=name, settings=settings, exact_intervals=True,
+                               seconds=time.perf_counter()-before,
+                               speakers=len(out.speaker_diarization.labels())))
+    if (seg.calls, emb.calls, seg.hits, emb.hits) != (0, 0, len(trials), len(trials)):
+        raise RuntimeError("Unexpected neural-stage calls during disk replay")
+    output.mkdir(mode=0o700, exist_ok=False)
+    report = dict(identity, schema_version=1, cache_sha256=sha(path),
+                  cache_bytes=path.stat().st_size, cache_load_seconds=load_seconds,
+                  exact_disk_intervals=True, segmentation_calls=seg.calls,
+                  embedding_calls=emb.calls, trials=trials,
+                  total_seconds=time.perf_counter()-started)
+    with (output / "disk-replay-report.json").open("x") as f:
+        json.dump(report, f, indent=2, allow_nan=False)
+        f.write("\n")
+    print("Disk replay matched all saved regular/exclusive intervals; zero neural calls.", flush=True)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--preflight", action="store_true")
     parser.add_argument("--audio", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--replay-cache", type=Path, help="Existing probe output directory")
     args = parser.parse_args(argv)
     if args.self_test:
         self_test()
@@ -102,6 +178,16 @@ def main(argv=None):
                embedding_exclude_overlap=bool(p.embedding_exclude_overlap),
                segmentation_min_duration_off=float(p.segmentation.min_duration_off))
     spec = p._segmentation.model.specifications
+    if args.replay_cache is not None:
+        identity = dict(clip=args.audio.stem, versions=found, model=MODEL,
+                        snapshot=config.parent.name, config_sha256=sha(config),
+                        audio_sha256=sha(args.audio), device="mps", config=cfg,
+                        segmentation_model=type(p._segmentation.model).__name__,
+                        powerset=bool(spec.powerset))
+        if not spec.powerset:
+            raise RuntimeError("Disk replay requires powerset segmentation")
+        replay_cache(args.replay_cache, args.output, identity, p, waveform, SAMPLE_RATE)
+        return
     seg = Memo(p.get_segmentations)
     emb = Memo(p.get_embeddings)
     trials, outputs = [], {}
