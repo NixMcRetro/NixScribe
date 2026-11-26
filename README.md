@@ -9,7 +9,6 @@
   <img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-7855a6">
   <img alt="Apple silicon" src="https://img.shields.io/badge/macOS-Apple%20silicon-555555">
   <img alt="Local transcription" src="https://img.shields.io/badge/transcription-local-2c875f">
-  <a href="https://github.com/NixMcRetro/NixScribe/actions/workflows/build-macos.yml"><img alt="macOS build status" src="https://github.com/NixMcRetro/NixScribe/actions/workflows/build-macos.yml/badge.svg?branch=main"></a>
 </p>
 
 Turn recordings into words, right on your Mac. NixScribe is a local English transcription app built for Apple silicon. No cloud transcription service required.
@@ -27,7 +26,7 @@ Turn recordings into words, right on your Mac. NixScribe is a local English tran
 
 **Apple silicon · macOS 15+ · Internet for initial model downloads**
 
-1. Grab the app from [Releases](https://github.com/NixMcRetro/NixScribe/releases) or a [successful macOS build](https://github.com/NixMcRetro/NixScribe/actions/workflows/build-macos.yml?query=branch%3Amain+is%3Asuccess) (temporary **Artifacts**).
+1. Grab the app from [Releases](https://github.com/NixMcRetro/NixScribe/releases) or a [successful macOS build](https://github.com/NixMcRetro/NixScribe/actions/workflows/build-macos.yml?query=is%3Asuccess) (temporary **Artifacts**; check the branch or tag).
 2. Unzip, move NixScribe to Applications and open it.
 3. Choose a recording, set the speaker count and press **Start**.
 

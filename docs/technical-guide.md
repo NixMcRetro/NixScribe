@@ -270,9 +270,10 @@ The final TXT and SRT are always written in chronological order even if internal
 
 The repository includes `.github/workflows/build-macos.yml`. GitHub Actions builds the Apple-silicon app on the native `macos-26` ARM64 runner.
 
-- Every push to `main` and pull request produces a downloadable development artifact retained for three days.
+- Pull requests targeting `main` and manual workflow runs produce downloadable development artifacts retained for three days.
 - Superseded development builds are cancelled automatically.
-- A version tag matching the app version (starting with `v0.2.0`) triggers a permanent GitHub Release only after build and test success. Each published archive includes a SHA-256 checksum. Existing releases are not overwritten automatically.
+- Merging into `main` does not trigger another build. To test a merged commit without publishing, use **Actions → Build macOS app → Run workflow** and select `main`.
+- For a stable release, merge the PR first, then create and push a version tag matching the app version (starting with `v0.2.0`) on the intended merged commit. The tag triggers one full build and test run, then a permanent GitHub Release with a SHA-256 checksum. Existing releases are not overwritten automatically.
 
 The workflow does not download Whisper model weights. Models are resolved on the Mac that runs NixScribe and remain in the normal Hugging Face/PyTorch caches.
 
