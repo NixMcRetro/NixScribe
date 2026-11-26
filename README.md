@@ -17,7 +17,7 @@ Turn recordings into words, right on your Mac. NixScribe is a local English tran
 ## ✨ What's inside?
 
 - 🎙️ Transcribe audio and video with MLX Whisper.
-- 👥 Identify who's speaking with FluidAudio Core ML.
+- 👥 Identify who's speaking with Pyannote or fast FluidAudio Core ML.
 - ⚡ Let Apple silicon do the heavy lifting, with automatic fallbacks.
 - 📝 Save readable transcripts, timed subtitles and optional MP3s.
 - 🔒 Keep your recordings private and originals untouched.
@@ -37,7 +37,7 @@ For multiple speakers, accept the [Pyannote model terms](https://huggingface.co/
 
 On an M5 Mac, one 83.1-second test recording went from **78 seconds to 14 seconds** with cached models. That's approximately **5.6× faster**.
 
-MLX handles recognition on the GPU; Core ML can use the CPU, GPU and Neural Engine for speaker identification. Pyannote MPS and CPU remain available as fallbacks.
+MLX handles recognition on the GPU. Pyannote GPU is the quality-first speaker identification default; FluidAudio Core ML is available for speed, and Pyannote CPU remains a fallback.
 
 *One short-recording benchmark, not a guarantee. Speaker accuracy and longer recordings are still being evaluated.*
 
@@ -56,7 +56,7 @@ Readable words, timed subtitles and optional audio. No overwriting earlier proje
 ## 🧭 What's next?
 
 - **v0.3.0** · Apple silicon acceleration
-- **[v0.3.1](https://github.com/NixMcRetro/NixScribe/issues/3)** · Combined diarization and accuracy
+- **[v0.3.1](https://github.com/NixMcRetro/NixScribe/issues/3)** · Diarization validation, backend selection and interface polish
 - **v0.4.0** · Multi-source transcription
 - **v0.5.0** · Local AI-assisted reconciliation
 

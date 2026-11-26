@@ -44,7 +44,8 @@
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+      font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased;
       background:
         radial-gradient(circle at 50% -20%, rgba(10,132,255,.10), transparent 36rem),
         var(--bg);
@@ -61,7 +62,12 @@
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
       width: 100%; padding: 12px 16px;
     }
-    h1 { margin: 0; font-size: 24px; letter-spacing: -.45px; line-height: 1.12; }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .brand-icon { width: 48px; height: 48px; object-fit: contain; flex: none; }
+    h1 { margin: 0; font-size: 23px; font-weight: 720; letter-spacing: -.55px; line-height: 1.12; }
+    .settings-grid { align-items: start; }
+    .settings-grid > div { min-width: 0; }
+    .field-group + .field-group { margin-top: 14px; }
     .subtitle { margin-top: 4px; color: var(--muted); font-size: 12px; }
     .status-stack { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
     .status-pill {
@@ -80,7 +86,7 @@
     .badge.good { color: var(--good); }
     .badge.bad { color: var(--bad); }
     .card {
-      margin-top: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 18px;
+      margin-top: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 16px;
       background: var(--surface); box-shadow: var(--shadow); backdrop-filter: blur(18px);
     }
     .section-title {
@@ -102,6 +108,11 @@
       width: 100%; color: var(--text); background: var(--surface-soft);
       border: 1px solid var(--line); border-radius: 11px; padding: 10px 11px; outline: none;
     }
+    select { appearance: none; -webkit-appearance: none; min-height: 39px; padding-right: 30px;
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+    input[readonly], select:disabled { color: var(--muted); cursor: default; }
+    button:focus-visible, details > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     input:focus, select:focus, textarea:focus {
       border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
     }
@@ -114,14 +125,16 @@
     button:disabled { opacity: .45; cursor: default; }
     button.primary {
       min-width: 230px; padding: 12px 22px; border-color: transparent;
-      color: white; background: var(--accent); box-shadow: 0 7px 20px rgba(10,132,255,.22);
+      color: white; background: var(--good); box-shadow: 0 7px 20px rgba(36,138,61,.20);
     }
     button.cancel { color: var(--bad); }
     .hint { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
     .checkline { display: flex; gap: 9px; align-items: center; margin-top: 10px; }
     .checkline input { width: auto; }
     .checkline label { margin: 0; color: var(--text); font-weight: 500; }
-    .actions { display: flex; justify-content: center; gap: 10px; margin-top: 18px; }
+    .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    .actions .action-hint { flex: 1; margin: 0; }
+    .prompt-grid.single { grid-template-columns: 1fr; }
     .advanced {
       margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px;
     }
@@ -175,7 +188,7 @@
     .error-title { color: var(--bad); font-weight: 760; font-size: 17px; }
     .error-text { margin-top: 7px; font-size: 13px; line-height: 1.45; word-break: break-word; }
     .terminal {
-      margin-top: 10px; padding: 13px; max-height: 260px; overflow: auto; border-radius: 12px;
+      margin-top: 10px; padding: 13px; min-height: 120px; max-height: 320px; overflow: auto; border-radius: 12px;
       background: var(--terminal); color: var(--terminal-text); white-space: pre-wrap;
       font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
@@ -191,7 +204,7 @@
       white-space: pre-wrap; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
     .hidden { display: none !important; }
-    .form-error { color: var(--bad); text-align: center; margin-top: 9px; font-size: 12px; font-weight: 650; }
+    .form-error { color: var(--bad); text-align: right; margin-top: 9px; font-size: 12px; font-weight: 650; }
     @media (max-width: 760px) {
       .shell { width: min(100% - 20px, 980px); margin-top: 12px; }
       .topbar { flex-wrap: wrap; padding: 10px 12px; }
@@ -200,16 +213,21 @@
       .grid, .grid.two { grid-template-columns: 1fr; }
       .path-row, .source-box { grid-template-columns: 1fr; }
       button.primary { width: 100%; min-width: 0; }
-      .actions { flex-direction: column; }
+      .actions { flex-direction: column; align-items: stretch; }
+      .form-error { text-align: left; }
+      .brand-icon { width: 42px; height: 42px; }
     }
   </style>
 </head>
 <body>
 <div class="pinned-header">
   <header class="topbar">
-    <div>
+    <div class="brand">
+      {% if brand_icon %}<img class="brand-icon" src="{{ url_for('brand_icon') }}" alt="" width="48" height="48">{% endif %}
+      <div>
       <h1>NixScribe <span style="font-size:12px;font-weight:400;color:var(--muted)">v{{ app_version }}</span></h1>
       <div class="subtitle">Local transcription for macOS</div>
+      </div>
     </div>
     <div class="status-stack">
       <div id="statusPill" class="status-pill"><span class="dot"></span><span id="statusLabel">Ready</span></div>
@@ -251,7 +269,7 @@
         <div id="sourceMeta" class="source-meta">Choose an audio or video file to begin.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="browseBtn" type="button">Choose…</button>
+        <button id="browseBtn" type="button">Choose Media…</button>
         <button id="refreshBtn" type="button">Recent</button>
       </div>
     </div>
@@ -262,7 +280,7 @@
       <label for="projectsDir">Save transcription projects to</label>
       <div class="path-row">
         <input id="projectsDir" value="{{ default_projects_dir }}">
-        <button id="browseProjectsBtn" type="button">Choose…</button>
+        <button id="browseProjectsBtn" type="button">Choose Folder…</button>
         <button id="openOutputBtn" type="button">Open</button>
       </div>
       <div class="hint">New folders use YYYY-MM-DD Recording name.</div>
@@ -279,40 +297,47 @@
 
   <section class="card">
     <div class="section-title">Transcription</div>
-    <div class="grid">
+    <div class="grid two settings-grid">
       <div>
-        <label for="model">Model</label>
+        <div class="field-group">
+        <label for="model">Recognition model</label>
         <select id="model">
           {% if apple_silicon %}
-          <optgroup label="MLX Whisper - Apple GPU (preferred)">
+          <optgroup label="MLX – GPU">
           {% for model_id, model_label in mlx_models %}
-          <option value="{{ model_id }}" data-engine="mlx" data-repository="{{ mlx_repositories[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
+          <option value="{{ model_id }}" data-engine="mlx" data-repository="{{ mlx_repositories[model_id] }}" data-description="{{ model_descriptions[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
           {% endfor %}
           </optgroup>
           {% endif %}
-          <optgroup label="WhisperX - CPU">
+          <optgroup label="Faster-Whisper – CPU">
           {% for model_id, model_label in models %}
-          <option value="{{ model_id }}" data-engine="cpu" data-repository="{{ model_repositories[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
+          <option value="{{ model_id }}" data-engine="cpu" data-repository="{{ model_repositories[model_id] }}" data-description="{{ model_descriptions[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
           {% endfor %}
           </optgroup>
         </select>
         <div class="hint">Model repository on Hugging Face:</div>
         <div id="modelRepository" class="model-repository">{{ mlx_repositories.get(default_model) or model_repositories.get(default_model) }}</div>
-        <div id="engineHint" class="hint">CPU speech recognition; existing alignment and speaker identification.</div>
+        <div id="engineHint" class="hint"></div>
+        <div class="hint">Approximate quality-first order within each engine; accuracy varies by recording.</div>
+        </div>
+        <div class="field-group">
+          <label id="precisionLabel" for="computeType">Recognition precision</label>
+          <select id="computeType">
+            <option value="float32" selected>FP32 (float32) - full precision</option>
+            <option value="int8">INT8 - reduced memory</option>
+          </select>
+          <input id="mlxPrecision" class="hidden" type="text" value="FP16 (float16)" readonly>
+          <div id="precisionHint" class="hint">CPU recognition precision.</div>
+          <div id="recognitionActual" class="hint" role="status"></div>
+        </div>
       </div>
       <div>
-        <label for="computeType">Quality</label>
-        <select id="computeType">
-          <option value="float32" selected>float32 - maximum fidelity</option>
-          <option value="int8">int8 - faster</option>
-        </select>
-      </div>
-      <div>
+        <div class="field-group">
         <label for="speakerCount">Speakers</label>
         <select id="speakerCount">
-          <option value="auto">Auto</option>
+          <option value="auto" selected>Auto</option>
           <option value="1">1 speaker</option>
-          <option value="2" selected>2 speakers</option>
+          <option value="2">2 speakers</option>
           <option value="3">3 speakers</option>
           <option value="4">4 speakers</option>
           <option value="5">5 speakers</option>
@@ -323,45 +348,58 @@
           <option value="10">10 speakers</option>
         </select>
         <div class="hint">Choose the exact count when known. One speaker skips diarization.</div>
-        <label for="diarizationDevice" style="margin-top:12px">Speaker identification</label>
+        </div>
+        <div class="field-group">
+        <label id="diarizationLabel" for="diarizationDevice">Speaker identification</label>
         <select id="diarizationDevice">
           {% if apple_silicon %}
-          <option value="coreml" {% if default_diarization_device == 'coreml' %}selected{% endif %}>Core ML (preferred)</option>
-          <option value="mps">Apple GPU (Pyannote)</option>
+          <option value="mps" {% if default_diarization_device == 'mps' %}selected{% endif %}>Pyannote (GPU)</option>
+          <option value="coreml" {% if default_diarization_device == 'coreml' %}selected{% endif %}>FluidAudio (Core ML)</option>
+          <option value="intelligent-auto-v5">Intelligent Auto v5 (Experimental)</option>
+          <option value="combined">Combined (Experimental)</option>
           {% endif %}
-          <option value="cpu" {% if default_diarization_device == 'cpu' %}selected{% endif %}>CPU (Pyannote)</option>
+          <option value="cpu" {% if default_diarization_device == 'cpu' %}selected{% endif %}>Pyannote (CPU)</option>
         </select>
+        <input id="diarizationInactive" class="hidden" type="text" value="Not required - single speaker" readonly>
         <div id="diarizationHint" class="hint">Independent of the transcription model.</div>
+        <div id="diarizationActual" class="hint" role="status"></div>
+        </div>
       </div>
     </div>
 
-    <div class="grid two" style="margin-top:14px">
-      <div>
-        <label for="hotwords">Names and uncommon terminology</label>
+    <div id="promptGrid" class="grid two prompt-grid" style="margin-top:14px">
+      <div id="hotwordsField">
+        <label for="hotwords">Names and uncommon terminology (CPU)</label>
         <textarea id="hotwords" placeholder="Surname, product name, acronym, technical term"></textarea>
       </div>
       <div>
-        <label for="initialPrompt">Context</label>
+        <label for="initialPrompt">Context and names</label>
         <textarea id="initialPrompt" placeholder="Example: A two-person technical interview about computer repair. English."></textarea>
       </div>
     </div>
 
     <details class="advanced">
       <summary>Advanced settings</summary>
+      <div class="checkline">
+        <input id="saveDiagnostics" type="checkbox">
+        <label for="saveDiagnostics">Save private speaker diagnostics (JSON includes transcript words)</label>
+      </div>
       <div style="max-width:220px;margin-top:12px">
-        <label for="batchSize">Batch size</label>
+        <label id="batchLabel" for="batchSize">CPU batch size</label>
         <select id="batchSize">
           <option>2</option>
           <option selected>4</option>
           <option>6</option>
           <option>8</option>
         </select>
+        <div id="batchHint" class="hint">Applies to CPU recognition.</div>
       </div>
     </details>
 
     <div class="actions">
-      <button id="startBtn" class="primary">Start Transcription</button>
+      <span id="startHint" class="hint action-hint" role="status" aria-live="polite">Choose media to begin.</span>
       <button id="cancelBtn" class="cancel" disabled>Cancel</button>
+      <button id="startBtn" class="primary" disabled>Start Transcription</button>
     </div>
     <div id="formError" class="form-error"></div>
   </section>
@@ -374,7 +412,7 @@
         <label for="txtGroupTurns">Group nearby speech by speaker (long turns still split into paragraphs)</label>
       </div>
       <div class="checkline" style="margin-top:0">
-        <input id="srtSpeakerLabels" type="checkbox" checked>
+        <input id="srtSpeakerLabels" type="checkbox">
         <label for="srtSpeakerLabels">Keep speaker labels in SRT subtitles</label>
       </div>
     </div>
@@ -411,7 +449,7 @@
   <section id="errorCard" class="card error-card hidden">
     <div class="error-title">Transcription stopped</div>
     <div id="errorText" class="error-text"></div>
-    <div class="hint">Open the activity log below for the full technical traceback.</div>
+    <div class="hint">See the activity log below for the full technical traceback.</div>
   </section>
 
   <section class="card">
@@ -427,15 +465,14 @@
   </section>
 
   <section class="card">
-    <details id="logDetails">
-      <summary>Activity log</summary>
-      <div class="actions" style="justify-content:flex-start;margin-top:10px">
-        <button id="copyLogBtn" type="button" disabled>Copy Activity Log</button>
-        <span id="copyLogStatus" class="hint" role="status" aria-live="polite"></span>
-      </div>
-      <div id="log" class="terminal" tabindex="0">Waiting.</div>
-      <div class="hint">The complete current job is retained until you start another transcription or quit NixScribe.</div>
-    </details>
+    <div class="section-title">Activity log</div>
+    <div class="actions" style="justify-content:flex-start;margin-top:0">
+      <button id="copyLogBtn" type="button" disabled>Copy Activity Log</button>
+      <button id="exportLogBtn" type="button" disabled>Export Log</button>
+      <span id="copyLogStatus" class="hint" role="status" aria-live="polite"></span>
+    </div>
+    <div id="log" class="terminal" tabindex="0" aria-label="Current job activity log">Waiting.</div>
+    <div class="hint">Full current job retained until the next transcription or quit. Exports may contain private paths and technical details; review before sharing.</div>
   </section>
 
   <section id="resultCard" class="card hidden">
@@ -465,31 +502,62 @@
 const $ = id => document.getElementById(id);
 let startingJob = false;
 let lastJobStatus = 'Idle';
+let jobRunning = false;
+let exportingLog = false;
+let hfReady = {{ hf_token_set|tojson }};
+
+function updateStartState() {
+  const missingMedia = !$('inputFile').value.trim();
+  const missingToken = $('speakerCount').value !== '1' && !hfReady;
+  $('startBtn').disabled = jobRunning || startingJob || missingMedia || missingToken;
+  const hint = jobRunning || startingJob ? 'Transcription in progress.' : missingMedia ? 'Choose media to begin.' : missingToken ? 'Save a Hugging Face token below for multiple speakers.' : 'Ready to transcribe locally.';
+  if ($('startHint').textContent !== hint) $('startHint').textContent = hint;
+}
 
 function updateModelRepository() {
   const option = $('model').selectedOptions[0];
   $('modelRepository').textContent = option ? option.dataset.repository : '';
   const isMLX = option?.dataset.engine === 'mlx';
   $('computeType').disabled = isMLX;
-  $('batchSize').disabled = isMLX;
+  $('computeType').classList.toggle('hidden', isMLX);
+  $('mlxPrecision').classList.toggle('hidden', !isMLX);
+  $('precisionLabel').htmlFor = isMLX ? 'mlxPrecision' : 'computeType';
+  $('precisionHint').textContent = isMLX
+    ? 'Configured FP16. Automatic CPU fallback uses FP32.'
+    : 'FP32 or INT8 affects recognition only, not speaker identification.';
+  $('batchLabel').textContent = isMLX ? 'CPU fallback batch size' : 'CPU batch size';
+  $('batchHint').textContent = isMLX ? 'Only used if MLX falls back to CPU.' : 'Applies to CPU recognition.';
   $('hotwords').disabled = isMLX;
-  $('engineHint').textContent = isMLX
-    ? 'Apple GPU recognition (FP16). Automatically retries the equivalent CPU model if needed. Word alignment uses CPU. Use Context for names; CPU settings do not apply to MLX. Live transcript appears after decoding.'
-    : 'CPU speech recognition; existing alignment and speaker identification.';
+  $('hotwordsField').classList.toggle('hidden', isMLX);
+  $('promptGrid').classList.toggle('single', isMLX);
+  $('engineHint').textContent = option?.dataset.description || '';
 }
 $('model').addEventListener('change', updateModelRepository);
 updateModelRepository();
 
 function updateDiarizationDevice() {
   const single = $('speakerCount').value === '1';
+  const experimental = $('diarizationDevice').querySelector('option[value="intelligent-auto-v5"]');
+  if (experimental) {
+    experimental.disabled = $('speakerCount').value !== 'auto';
+    if (experimental.disabled && experimental.selected && !single) $('diarizationDevice').value = 'mps';
+  }
   $('diarizationDevice').disabled = single;
+  $('diarizationDevice').classList.toggle('hidden', single);
+  $('diarizationInactive').classList.toggle('hidden', !single);
+  $('diarizationLabel').htmlFor = single ? 'diarizationInactive' : 'diarizationDevice';
+  updateStartState();
   $('diarizationHint').textContent = single
     ? 'One speaker skips speaker identification.'
-    : $('diarizationDevice').value === 'mps'
-      ? 'Uses Pyannote on the Apple GPU. Retries on CPU if needed.'
+    : $('diarizationDevice').value === 'intelligent-auto-v5'
+      ? 'Experimental, Auto count only. Five cached Pyannote candidates plus FluidAudio acoustic refinement. No proven overall accuracy gain; falls back to Pyannote.'
+    : $('diarizationDevice').value === 'combined'
+      ? 'Runs FluidAudio and Pyannote. Slower; not shown to improve accuracy consistently.'
+      : $('diarizationDevice').value === 'mps'
+      ? 'Quality-first default. Pyannote on GPU; retries on CPU if needed.'
       : $('diarizationDevice').value === 'coreml'
         ? 'FluidAudio uses CPU, GPU and Neural Engine as available. Separate first-use model download. Retries on Apple GPU, then CPU if needed.'
-        : 'Independent of the transcription model.';
+        : 'Pyannote on CPU. Independent of recognition precision.';
 }
 $('speakerCount').addEventListener('change', updateDiarizationDevice);
 $('diarizationDevice').addEventListener('change', updateDiarizationDevice);
@@ -510,6 +578,7 @@ function basename(path) {
 
 function updateSourceSummary() {
   const path = $('inputFile').value.trim();
+  updateStartState();
   if (!path) {
     $('sourceName').textContent = 'No media selected';
     $('sourceMeta').textContent = 'Choose an audio or video file to begin.';
@@ -672,7 +741,21 @@ async function poll() {
       logNode.scrollTop = atBottom ? logNode.scrollHeight : previousTop;
     }
     $('copyLogBtn').disabled = !logEntries.length;
-    $('startBtn').disabled = !!s.running || startingJob;
+    $('exportLogBtn').disabled = exportingLog || !logEntries.length;
+    const r = s.recognition;
+    $('recognitionActual').textContent = r
+      ? 'Used: ' + r.actual + ' - ' + (r.device === 'apple-gpu' ? 'GPU' : 'CPU') +
+        ' - configured ' + ({float16: 'FP16', float32: 'FP32', int8: 'INT8'}[r.configured_precision] || r.configured_precision) +
+        (r.fallback ? ' (fallback from ' + r.requested + ')' : '')
+      : '';
+    const d = s.diarization_actual;
+    const deviceNames = {mps: 'Pyannote (GPU)', cpu: 'Pyannote (CPU)', coreml: 'FluidAudio (Core ML)', combined: 'Combined (Experimental)', 'intelligent-auto-v5': 'Intelligent Auto v5 (Experimental)', single: 'Single speaker (no diarization)'};
+    $('diarizationActual').textContent = d
+      ? 'Used: ' + (deviceNames[d.actual] || d.actual) + (d.fallback ? ' (fallback)' : '')
+      : '';
+    jobRunning = !!s.running;
+    hfReady = !!s.hf_token_set;
+    updateStartState();
     $('cancelBtn').disabled = !s.running;
     $('quitBtn').disabled = !!s.running;
 
@@ -684,7 +767,6 @@ async function poll() {
     if (s.error) {
       $('errorCard').classList.remove('hidden');
       $('errorText').textContent = s.error;
-      $('logDetails').open = true;
     } else {
       $('errorCard').classList.add('hidden');
       $('errorText').textContent = '';
@@ -718,6 +800,25 @@ $('copyLogBtn').addEventListener('click', async () => {
     selection.removeAllRanges();
     selection.addRange(range);
     feedback.textContent = 'Log selected. Press Command-C to copy.';
+  }
+});
+
+$('exportLogBtn').addEventListener('click', async () => {
+  const feedback = $('copyLogStatus');
+  exportingLog = true;
+  $('exportLogBtn').disabled = true;
+  try {
+    const data = await jsonFetch('/api/log/export', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-NixScribe-Action': 'export-log'},
+      body: '{}'
+    });
+    feedback.textContent = data.cancelled ? 'Export cancelled.' : 'Saved: ' + data.path;
+  } catch (error) {
+    feedback.textContent = 'Log export failed: ' + error.message;
+  } finally {
+    exportingLog = false;
+    poll();
   }
 });
 
@@ -760,10 +861,11 @@ $('startBtn').addEventListener('click', async () => {
     copy_original: $('copyOriginal').checked,
     save_mp3: $('saveMp3').checked,
     model: $('model').value,
-    compute_type: $('computeType').value,
+    compute_type: $('computeType').disabled ? 'float32' : $('computeType').value,
     batch_size: Number($('batchSize').value),
     speaker_count: $('speakerCount').value,
     diarization_device: $('diarizationDevice').disabled ? 'cpu' : $('diarizationDevice').value,
+    save_diagnostics: $('saveDiagnostics').checked,
     txt_group_turns: $('txtGroupTurns').checked,
     srt_speaker_labels: $('srtSpeakerLabels').checked,
     srt_chars_per_line: Number($('srtWidth').value),
@@ -789,6 +891,7 @@ $('startBtn').addEventListener('click', async () => {
     }
   } finally {
     startingJob = false;
+    updateStartState();
     await poll();
   }
 });

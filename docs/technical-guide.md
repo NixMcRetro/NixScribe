@@ -2,13 +2,13 @@
 
 [← Back to NixScribe](../README.md)
 
-Detailed setup, model configuration, local storage, export behaviour and development notes for v0.3.0.
+Detailed setup, model configuration, local storage, export behaviour and development notes for v0.3.1.
 
 ## Features
 
 - MLX Whisper is preferred on Apple silicon, with eight selectable CPU Whisper models for compatibility and fallback. Model weights download on first use.
 - English transcription with forced alignment for accurate timestamps.
-- FluidAudio Core ML diarization, with Pyannote Community-1 MPS and CPU alternatives.
+- Pyannote Community-1 GPU diarization by default; FluidAudio Core ML and Pyannote CPU alternatives.
 - Speaker selector: Auto or an exact 1-10 speakers.
 - Real WhisperX stage progress and percentages.
 - Live transcript view showing the most recently decoded timestamped text.
@@ -32,8 +32,8 @@ Example TXT output:
 For a recent Apple-silicon Mac with sufficient RAM, the default quality-first profile is:
 
 - Model: `large-v3 - MLX Community` (Apple GPU, FP16)
-- Speaker identification: Core ML (FluidAudio, all compute units)
-- Speaker count: choose the exact number when known
+- Speaker identification: Pyannote (GPU); choose FluidAudio (Core ML) for speed
+- Speaker count: Auto by default; choose the exact number when known
 - CPU fallback uses the corresponding Whisper model in float32
 
 `int8` and `large-v3-turbo` remain available when speed matters more. Other model choices are `distil-large-v3.5`, `distil-large-v3`, `medium.en`, `small.en`, `base.en`, and `tiny.en`. These are Faster-Whisper CPU models, not GPU-accelerated engines. Smaller or distilled models can trade accuracy for speed. Selecting exactly one speaker skips pyannote diarization and does not require a Hugging Face token for that job.
@@ -246,13 +246,19 @@ The build includes FluidAudio's Apache-2.0 license.
 
 ## Activity log
 
-Expand Activity log and click **Copy Activity Log** to copy the full current
-job as plain text to the macOS clipboard. The log no longer drops older
-entries at an arbitrary line limit. It remains available after completion,
-cancellation or failure until the next job starts or the app quits. The
-viewport follows new entries only while at the bottom, and polling does not
-replace selected text. Logs are not automatically uploaded or saved to disk;
-check paths and technical details before sharing them.
+The Activity log is always expanded. Click **Copy Activity Log** to copy the
+full current job to the macOS clipboard, or **Export Log** to choose a folder
+and save a uniquely named private UTF-8 text snapshot. The log does not drop
+older entries. It remains available after completion, cancellation or failure
+until the next job starts or the app quits. The viewport follows new entries
+only while at the bottom, and polling does not replace selected text. Logs
+are not automatically uploaded or saved to disk; review paths and technical
+details before sharing them.
+
+The recognition selector shows configured precision, not a measurement of
+every operation's numerical type. The completed recognition status and log
+identify the actual model, backend, configured precision and fallback.
+The speaker identification status likewise reports the engine actually used.
 
 ## Live transcription view
 
@@ -366,3 +372,15 @@ require the supplied master artwork.
 - v0.5.0: multi-model comparison and optional local language-model reconciliation, preserving the original transcript evidence. No cloud processing by default.
 
 v0.3.0 establishes MLX and Core ML as the Apple silicon defaults with automatic fallback. [Issue #3](https://github.com/NixMcRetro/NixScribe/issues/3) tracks v0.3.1 combined diarization and accuracy improvements. Parakeet evaluation and the later multi-source stages remain optional future work.
+
+
+## Intelligent Auto v5 (experimental)
+
+Select Auto speaker count on Apple silicon to enable this opt-in research mode.
+It reuses one Pyannote GPU segmentation and embedding pass for five CPU
+clustering candidates, then uses FluidAudio intervals to refine selected
+short speaker labels. It is not the older Combined mode. Pyannote remains
+the default: independent validation did not establish a reliable accuracy
+gain. The experimental mode checks the frozen model and dependency versions
+and reports any fallback to standard Pyannote. Manual counts and one-speaker
+bypass are unchanged. See [validation and release gates](diarization-validation.md).
