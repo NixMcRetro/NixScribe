@@ -29,7 +29,7 @@ class DiarizationBackendTests(unittest.TestCase):
 
     def test_default_device_prefers_apple_silicon(self):
         with patch("diarization_backend.sys.platform", "darwin"), patch("platform.machine", return_value="arm64"):
-            self.assertEqual(default_device(), "coreml")
+            self.assertEqual(default_device(), "mps")
             self.assertEqual(preferred_model(), "mlx-large-v3")
         with patch("diarization_backend.sys.platform", "linux"):
             self.assertEqual(default_device(), "cpu")

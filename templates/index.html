@@ -86,7 +86,7 @@
     .badge.good { color: var(--good); }
     .badge.bad { color: var(--bad); }
     .card {
-      margin-top: 14px; padding: 20px; border: 1px solid var(--line); border-radius: 18px;
+      margin-top: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 16px;
       background: var(--surface); box-shadow: var(--shadow); backdrop-filter: blur(18px);
     }
     .section-title {
@@ -125,7 +125,7 @@
     button:disabled { opacity: .45; cursor: default; }
     button.primary {
       min-width: 230px; padding: 12px 22px; border-color: transparent;
-      color: white; background: var(--accent); box-shadow: 0 7px 20px rgba(10,132,255,.22);
+      color: white; background: var(--good); box-shadow: 0 7px 20px rgba(36,138,61,.20);
     }
     button.cancel { color: var(--bad); }
     .hint { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
@@ -188,7 +188,7 @@
     .error-title { color: var(--bad); font-weight: 760; font-size: 17px; }
     .error-text { margin-top: 7px; font-size: 13px; line-height: 1.45; word-break: break-word; }
     .terminal {
-      margin-top: 10px; padding: 13px; max-height: 260px; overflow: auto; border-radius: 12px;
+      margin-top: 10px; padding: 13px; min-height: 120px; max-height: 320px; overflow: auto; border-radius: 12px;
       background: var(--terminal); color: var(--terminal-text); white-space: pre-wrap;
       font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
     }
@@ -303,21 +303,22 @@
         <label for="model">Recognition model</label>
         <select id="model">
           {% if apple_silicon %}
-          <optgroup label="MLX Whisper - Apple GPU (preferred)">
+          <optgroup label="MLX – GPU">
           {% for model_id, model_label in mlx_models %}
-          <option value="{{ model_id }}" data-engine="mlx" data-repository="{{ mlx_repositories[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
+          <option value="{{ model_id }}" data-engine="mlx" data-repository="{{ mlx_repositories[model_id] }}" data-description="{{ model_descriptions[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
           {% endfor %}
           </optgroup>
           {% endif %}
-          <optgroup label="WhisperX - CPU">
+          <optgroup label="Faster-Whisper – CPU">
           {% for model_id, model_label in models %}
-          <option value="{{ model_id }}" data-engine="cpu" data-repository="{{ model_repositories[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
+          <option value="{{ model_id }}" data-engine="cpu" data-repository="{{ model_repositories[model_id] }}" data-description="{{ model_descriptions[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
           {% endfor %}
           </optgroup>
         </select>
         <div class="hint">Model repository on Hugging Face:</div>
         <div id="modelRepository" class="model-repository">{{ mlx_repositories.get(default_model) or model_repositories.get(default_model) }}</div>
-        <div id="engineHint" class="hint">CPU speech recognition; existing alignment and speaker identification.</div>
+        <div id="engineHint" class="hint"></div>
+        <div class="hint">Approximate quality-first order within each engine; accuracy varies by recording.</div>
         </div>
         <div class="field-group">
           <label id="precisionLabel" for="computeType">Recognition precision</label>
@@ -325,17 +326,18 @@
             <option value="float32" selected>FP32 (float32) - full precision</option>
             <option value="int8">INT8 - reduced memory</option>
           </select>
-          <input id="mlxPrecision" class="hidden" type="text" value="FP16 (float16) - Apple GPU" readonly>
+          <input id="mlxPrecision" class="hidden" type="text" value="FP16 (float16)" readonly>
           <div id="precisionHint" class="hint">CPU recognition precision.</div>
+          <div id="recognitionActual" class="hint" role="status"></div>
         </div>
       </div>
       <div>
         <div class="field-group">
         <label for="speakerCount">Speakers</label>
         <select id="speakerCount">
-          <option value="auto">Auto</option>
+          <option value="auto" selected>Auto</option>
           <option value="1">1 speaker</option>
-          <option value="2" selected>2 speakers</option>
+          <option value="2">2 speakers</option>
           <option value="3">3 speakers</option>
           <option value="4">4 speakers</option>
           <option value="5">5 speakers</option>
@@ -351,14 +353,15 @@
         <label id="diarizationLabel" for="diarizationDevice">Speaker identification</label>
         <select id="diarizationDevice">
           {% if apple_silicon %}
-          <option value="coreml" {% if default_diarization_device == 'coreml' %}selected{% endif %}>Core ML (FluidAudio)</option>
+          <option value="mps" {% if default_diarization_device == 'mps' %}selected{% endif %}>Pyannote (GPU)</option>
+          <option value="coreml" {% if default_diarization_device == 'coreml' %}selected{% endif %}>FluidAudio (Core ML)</option>
           <option value="combined">Combined (Experimental)</option>
-          <option value="mps">Apple GPU (Pyannote)</option>
           {% endif %}
-          <option value="cpu" {% if default_diarization_device == 'cpu' %}selected{% endif %}>CPU (Pyannote)</option>
+          <option value="cpu" {% if default_diarization_device == 'cpu' %}selected{% endif %}>Pyannote (CPU)</option>
         </select>
         <input id="diarizationInactive" class="hidden" type="text" value="Not required - single speaker" readonly>
         <div id="diarizationHint" class="hint">Independent of the transcription model.</div>
+        <div id="diarizationActual" class="hint" role="status"></div>
         </div>
       </div>
     </div>
@@ -445,7 +448,7 @@
   <section id="errorCard" class="card error-card hidden">
     <div class="error-title">Transcription stopped</div>
     <div id="errorText" class="error-text"></div>
-    <div class="hint">Open the activity log below for the full technical traceback.</div>
+    <div class="hint">See the activity log below for the full technical traceback.</div>
   </section>
 
   <section class="card">
@@ -461,15 +464,14 @@
   </section>
 
   <section class="card">
-    <details id="logDetails">
-      <summary>Activity log</summary>
-      <div class="actions" style="justify-content:flex-start;margin-top:10px">
-        <button id="copyLogBtn" type="button" disabled>Copy Activity Log</button>
-        <span id="copyLogStatus" class="hint" role="status" aria-live="polite"></span>
-      </div>
-      <div id="log" class="terminal" tabindex="0">Waiting.</div>
-      <div class="hint">The complete current job is retained until you start another transcription or quit NixScribe.</div>
-    </details>
+    <div class="section-title">Activity log</div>
+    <div class="actions" style="justify-content:flex-start;margin-top:0">
+      <button id="copyLogBtn" type="button" disabled>Copy Activity Log</button>
+      <button id="exportLogBtn" type="button" disabled>Export Log</button>
+      <span id="copyLogStatus" class="hint" role="status" aria-live="polite"></span>
+    </div>
+    <div id="log" class="terminal" tabindex="0" aria-label="Current job activity log">Waiting.</div>
+    <div class="hint">Full current job retained until the next transcription or quit. Exports may contain private paths and technical details; review before sharing.</div>
   </section>
 
   <section id="resultCard" class="card hidden">
@@ -500,6 +502,7 @@ const $ = id => document.getElementById(id);
 let startingJob = false;
 let lastJobStatus = 'Idle';
 let jobRunning = false;
+let exportingLog = false;
 let hfReady = {{ hf_token_set|tojson }};
 
 function updateStartState() {
@@ -519,16 +522,14 @@ function updateModelRepository() {
   $('mlxPrecision').classList.toggle('hidden', !isMLX);
   $('precisionLabel').htmlFor = isMLX ? 'mlxPrecision' : 'computeType';
   $('precisionHint').textContent = isMLX
-    ? 'Fixed FP16. Automatic CPU fallback uses FP32.'
+    ? 'Configured FP16. Automatic CPU fallback uses FP32.'
     : 'FP32 or INT8 affects recognition only, not speaker identification.';
   $('batchLabel').textContent = isMLX ? 'CPU fallback batch size' : 'CPU batch size';
   $('batchHint').textContent = isMLX ? 'Only used if MLX falls back to CPU.' : 'Applies to CPU recognition.';
   $('hotwords').disabled = isMLX;
   $('hotwordsField').classList.toggle('hidden', isMLX);
   $('promptGrid').classList.toggle('single', isMLX);
-  $('engineHint').textContent = isMLX
-    ? 'Apple GPU recognition. Word alignment uses CPU. Enter names in Context; the transcript appears after decoding.'
-    : 'Faster-Whisper recognition and alignment on CPU.';
+  $('engineHint').textContent = option?.dataset.description || '';
 }
 $('model').addEventListener('change', updateModelRepository);
 updateModelRepository();
@@ -545,7 +546,7 @@ function updateDiarizationDevice() {
     : $('diarizationDevice').value === 'combined'
       ? 'Runs FluidAudio and Pyannote. Slower; not shown to improve accuracy consistently.'
       : $('diarizationDevice').value === 'mps'
-      ? 'Uses Pyannote on the Apple GPU. Retries on CPU if needed.'
+      ? 'Quality-first default. Pyannote on GPU; retries on CPU if needed.'
       : $('diarizationDevice').value === 'coreml'
         ? 'FluidAudio uses CPU, GPU and Neural Engine as available. Separate first-use model download. Retries on Apple GPU, then CPU if needed.'
         : 'Pyannote on CPU. Independent of recognition precision.';
@@ -732,6 +733,18 @@ async function poll() {
       logNode.scrollTop = atBottom ? logNode.scrollHeight : previousTop;
     }
     $('copyLogBtn').disabled = !logEntries.length;
+    $('exportLogBtn').disabled = exportingLog || !logEntries.length;
+    const r = s.recognition;
+    $('recognitionActual').textContent = r
+      ? 'Used: ' + r.actual + ' - ' + (r.device === 'apple-gpu' ? 'GPU' : 'CPU') +
+        ' - configured ' + ({float16: 'FP16', float32: 'FP32', int8: 'INT8'}[r.configured_precision] || r.configured_precision) +
+        (r.fallback ? ' (fallback from ' + r.requested + ')' : '')
+      : '';
+    const d = s.diarization_actual;
+    const deviceNames = {mps: 'Pyannote (GPU)', cpu: 'Pyannote (CPU)', coreml: 'FluidAudio (Core ML)', combined: 'Combined (Experimental)', single: 'Single speaker (no diarization)'};
+    $('diarizationActual').textContent = d
+      ? 'Used: ' + (deviceNames[d.actual] || d.actual) + (d.fallback ? ' (fallback)' : '')
+      : '';
     jobRunning = !!s.running;
     hfReady = !!s.hf_token_set;
     updateStartState();
@@ -746,7 +759,6 @@ async function poll() {
     if (s.error) {
       $('errorCard').classList.remove('hidden');
       $('errorText').textContent = s.error;
-      $('logDetails').open = true;
     } else {
       $('errorCard').classList.add('hidden');
       $('errorText').textContent = '';
@@ -780,6 +792,25 @@ $('copyLogBtn').addEventListener('click', async () => {
     selection.removeAllRanges();
     selection.addRange(range);
     feedback.textContent = 'Log selected. Press Command-C to copy.';
+  }
+});
+
+$('exportLogBtn').addEventListener('click', async () => {
+  const feedback = $('copyLogStatus');
+  exportingLog = true;
+  $('exportLogBtn').disabled = true;
+  try {
+    const data = await jsonFetch('/api/log/export', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-NixScribe-Action': 'export-log'},
+      body: '{}'
+    });
+    feedback.textContent = data.cancelled ? 'Export cancelled.' : 'Saved: ' + data.path;
+  } catch (error) {
+    feedback.textContent = 'Log export failed: ' + error.message;
+  } finally {
+    exportingLog = false;
+    poll();
   }
 });
 

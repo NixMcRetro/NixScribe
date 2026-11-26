@@ -32,6 +32,8 @@ from app_config import (DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VE
 from mlx_backend import transcribe_mlx
 from model_cache import prepare_model, repository_for
 from audio_export import export_mp3, mp3_destination
+from activity_log import export_activity_log
+from app_config import MODEL_DESCRIPTIONS
 from project_paths import create_project_dir
 from diarization_backend import (DEVICES as DIARIZATION_DEVICES, default_device,
                                  run_coreml, run_mps, fallback_devices, validate_intervals)
@@ -117,6 +119,8 @@ STATE: dict[str, Any] = {
     "live_position": "Waiting for transcription to start.",
     "live_segment_count": 0,
     "log": [],
+    "recognition": None,
+    "diarization_actual": None,
     "error": None,
     "detected_speakers": [],
     "settings": {},
@@ -768,6 +772,7 @@ def _run_job(config: dict[str, Any]) -> None:
                        "device": "apple-gpu" if is_mlx else "cpu",
                        "configured_precision": "float16" if is_mlx else compute_type,
                        "fallback": model_id != requested_model}
+        _update(recognition=recognition)
         _append_log(f"Recognition completed: model={model_id}, requested={requested_model}, "
                     f"engine={recognition['engine']}, device={recognition['device']}, "
                     f"configured_precision={recognition['configured_precision']}, "
@@ -1011,6 +1016,8 @@ def _run_job(config: dict[str, Any]) -> None:
                 f"{', '.join(speakers) or 'none'}"
             )
 
+        _update(diarization_actual={"requested": requested_device, "actual": actual_device,
+                                    "fallback": actual_device not in (requested_device, "single")})
         from transcript_format import speaker_segments
         export_turns = speaker_segments(result)
         result["audio_duration"] = len(audio) / 16000.0
@@ -1194,6 +1201,7 @@ def index():
         default_projects_dir=str(DEFAULT_PROJECTS_DIR),
         models=MODELS,
         model_repositories=MODEL_REPOSITORIES,
+        model_descriptions=MODEL_DESCRIPTIONS,
         mlx_models=MLX_MODELS,
         mlx_repositories=MLX_REPOSITORIES,
         default_model=preferred_model(),
@@ -1239,6 +1247,32 @@ def copy_activity_log():
         return jsonify({"ok": True})
     except Exception:
         return jsonify({"ok": False, "error": "Could not copy to the macOS clipboard."}), 500
+
+
+@app.post("/api/log/export")
+def save_activity_log():
+    # Export the current local log snapshot, never an arbitrary client path.
+    if not request.is_json or request.headers.get("X-NixScribe-Action") != "export-log":
+        return jsonify({"ok": False, "error": "Invalid log export request."}), 400
+    origin = request.headers.get("Origin")
+    if origin and origin != request.host_url.rstrip("/"):
+        return jsonify({"ok": False, "error": "Invalid log export origin."}), 403
+    if sys.platform != "darwin":
+        return jsonify({"ok": False, "error": "Native log export requires macOS."}), 400
+    with state_lock:
+        entries = list(STATE["log"])
+    if not entries:
+        return jsonify({"ok": False, "error": "No activity to export yet."}), 400
+    try:
+        script = 'POSIX path of (choose folder with prompt "Save a private copy of the current activity log")'
+        proc = subprocess.run(["/usr/bin/osascript", "-e", script],
+                              capture_output=True, text=True, timeout=300)
+        if proc.returncode != 0:
+            return jsonify({"ok": False, "cancelled": True})
+        path = export_activity_log(Path(proc.stdout.rstrip("\n")), entries)
+        return jsonify({"ok": True, "path": str(path)})
+    except Exception:
+        return jsonify({"ok": False, "error": "Could not save the activity log."}), 500
 
 
 @app.post("/api/token")
@@ -1314,7 +1348,7 @@ def start_job():
     if not projects_dir:
         return jsonify({"ok": False, "error": "Choose where transcription projects should be saved."}), 400
 
-    speaker_raw = str(payload.get("speaker_count", "2")).strip().lower()
+    speaker_raw = str(payload.get("speaker_count", "auto")).strip().lower()
     try:
         speaker_count = None if speaker_raw in {"", "auto"} else int(speaker_raw)
         if speaker_count is not None and not 1 <= speaker_count <= 10:
@@ -1390,6 +1424,8 @@ def start_job():
         live_position="Preparing transcription…",
         live_segment_count=0,
         log=[],
+        recognition=None,
+        diarization_actual=None,
         error=None,
         detected_speakers=[],
         settings=config,
