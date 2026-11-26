@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from diarization_backend import validate_intervals, run_mps, run_coreml, default_device, fallback_devices
 from app_config import preferred_model, MLX_CPU_FALLBACK
+from diarization_backend import validate_auto_result
 
 
 class DiarizationBackendTests(unittest.TestCase):
@@ -37,10 +38,31 @@ class DiarizationBackendTests(unittest.TestCase):
 
     def test_fallback_order(self):
         self.assertEqual(fallback_devices("coreml"), ("coreml", "mps", "cpu"))
+        self.assertEqual(fallback_devices("intelligent-auto-v5"), ("coreml", "mps", "cpu"))
         self.assertEqual(fallback_devices("mps"), ("mps", "cpu"))
         self.assertEqual(fallback_devices("cpu"), ("cpu",))
         self.assertEqual(MLX_CPU_FALLBACK, {"mlx-large-v3": "large-v3",
                                           "mlx-large-v3-turbo": "large-v3-turbo"})
+
+    def test_experimental_worker_result_validation(self):
+        valid = {"intervals": [{"start": 0., "end": 1., "speaker": "A"}],
+                 "labels": ["A", "UNKNOWN"], "segmentation_calls": 1, "embedding_calls": 1,
+                 "selected": "baseline", "acoustic_changes": 0}
+        self.assertEqual(validate_auto_result(valid, 2), valid)
+        for bad in ({"labels": ["A"]}, {"labels": ["A", "B"]}, {"embedding_calls": 2},
+                    {"labels": None}, {"labels": [[], "A"]}, {"selected": "bogus"},
+                    {"acoustic_changes": 3}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                validate_auto_result({**valid, **bad}, 2)
+        fallback = {"intervals": valid["intervals"], "labels": None, "fallback_reason": "RuntimeError"}
+        self.assertEqual(validate_auto_result(fallback, 2), fallback)
+
+    def test_experimental_manual_count_rejected_before_spawn(self):
+        with tempfile.TemporaryDirectory() as tmp, patch("diarization_backend.subprocess.Popen") as spawn:
+            with self.assertRaises(ValueError):
+                run_mps(Path(tmp) / "sample.wav", 2, lambda *_: None, lambda: None,
+                        auto_inputs={"words": []})
+            spawn.assert_not_called()
 
     def test_missing_coreml_helper_does_not_spawn(self):
         with tempfile.TemporaryDirectory() as tmp, patch("diarization_backend.subprocess.Popen") as spawn:

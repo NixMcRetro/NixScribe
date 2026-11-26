@@ -108,6 +108,7 @@ jobs:
               grep -q 'value="auto" selected' /tmp/nixscribe-index.html
               grep -q 'id="exportLogBtn"' /tmp/nixscribe-index.html
               grep -q 'id="recognitionActual"' /tmp/nixscribe-index.html
+              grep -q 'value="intelligent-auto-v5"' /tmp/nixscribe-index.html
               grep -q 'value="mlx-large-v3".*selected' /tmp/nixscribe-index.html
               echo "Frozen NixScribe app launched and served its UI successfully."
               exit 0

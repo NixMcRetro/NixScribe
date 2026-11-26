@@ -16,7 +16,7 @@ import tempfile
 from typing import Any, Callable
 
 REPOSITORY = "pyannote/speaker-diarization-community-1"
-DEVICES = frozenset(("cpu", "mps", "coreml", "combined"))
+DEVICES = frozenset(("cpu", "mps", "coreml", "combined", "intelligent-auto-v5"))
 
 
 def default_device() -> str:
@@ -29,6 +29,7 @@ def fallback_devices(requested: str) -> tuple[str, ...]:
     return {
         "coreml": ("coreml", "mps", "cpu"),
         "combined": ("coreml", "mps", "cpu"),
+        "intelligent-auto-v5": ("coreml", "mps", "cpu"),
         "mps": ("mps", "cpu"),
         "cpu": ("cpu",),
     }[requested]
@@ -83,6 +84,18 @@ def worker_main(request_path: Path, result_path: Path, token: str | None) -> Non
     def report(percent: float) -> None:
         _write_json(progress, {"phase": "inference", "percent": float(percent)})
 
+    auto_inputs = request.get("auto_inputs")
+    if auto_inputs is not None:
+        if request["speaker_count"] is not None:
+            raise ValueError("Intelligent Auto requires automatic speaker count")
+        from intelligent_auto import capture_and_predict
+        output = capture_and_predict(pipeline, Path(request["audio"]),
+                                     auto_inputs["words"], auto_inputs["core"],
+                                     auto_inputs["duration"], report)
+        output["intervals"] = validate_intervals(output["intervals"])
+        _write_json(result_path, output)
+        return
+
     kwargs = {"progress_callback": report}
     if request["speaker_count"] is not None:
         kwargs["num_speakers"] = int(request["speaker_count"])
@@ -92,17 +105,40 @@ def worker_main(request_path: Path, result_path: Path, token: str | None) -> Non
     _write_json(result_path, {"intervals": validate_intervals(rows)})
 
 
+def validate_auto_result(output, word_count):
+    rows = validate_intervals(output["intervals"])
+    labels = output.get("labels")
+    if labels is None:
+        if not isinstance(output.get("fallback_reason"), str):
+            raise ValueError("Missing experimental fallback reason")
+    else:
+        from intelligent_auto import candidate_names
+        if (not isinstance(labels, list) or len(labels) != word_count
+                or any(not isinstance(label, str) for label in labels)
+                or not set(labels) <= ({row["speaker"] for row in rows} | {"UNKNOWN"})
+                or output.get("segmentation_calls") != 1 or output.get("embedding_calls") != 1
+                or output.get("selected") not in candidate_names
+                or type(output.get("acoustic_changes")) is not int
+                or not 0 <= output["acoustic_changes"] <= word_count):
+            raise ValueError("Invalid Intelligent Auto result")
+    return {**output, "intervals": rows}
+
+
 def run_mps(audio: Path, speaker_count: int | None,
             on_progress: Callable[[str, float], None],
-            check_cancel: Callable[[], None]) -> list[dict]:
+            check_cancel: Callable[[], None], *, auto_inputs=None) -> list[dict] | dict:
     check_cancel()
     with tempfile.TemporaryDirectory(prefix="diarization-mps-", dir=audio.parent) as tmp:
         tmp = Path(tmp)
         request = tmp / "request.json"
         result = tmp / "result.json"
         progress = tmp / "progress.json"
-        request.write_text(json.dumps({"audio": str(audio), "speaker_count": speaker_count}),
-                           encoding="utf-8")
+        payload = {"audio": str(audio), "speaker_count": speaker_count}
+        if auto_inputs is not None:
+            if speaker_count is not None:
+                raise ValueError("Intelligent Auto requires automatic speaker count")
+            payload["auto_inputs"] = auto_inputs
+        request.write_text(json.dumps(payload, allow_nan=False), encoding="utf-8")
         command = [sys.executable]
         if not getattr(sys, "frozen", False):
             command.append(str(Path(__file__).with_name("app.py")))
@@ -111,6 +147,10 @@ def run_mps(audio: Path, speaker_count: int | None,
         # fails, the parent explicitly retries the entire diarization on CPU.
         env = dict(os.environ)
         env["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
+        if auto_inputs is not None:
+            env.update(OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1",
+                       VECLIB_MAXIMUM_THREADS="1", PYANNOTE_METRICS_ENABLED="0",
+                       HF_HUB_DISABLE_TELEMETRY="1")
         with tempfile.TemporaryFile() as log:
             proc = subprocess.Popen(command, stdout=log, stderr=log, env=env)
             try:
@@ -140,9 +180,11 @@ def run_mps(audio: Path, speaker_count: int | None,
                     detail = re.sub(r"hf_[A-Za-z0-9]+", "[redacted]", detail)
                     raise RuntimeError(f"MPS diarization worker exited ({rc})"
                                        + (f": {detail}" if detail else ""))
-                rows = validate_intervals(json.loads(result.read_text(encoding="utf-8"))["intervals"])
+                output = json.loads(result.read_text(encoding="utf-8"))
                 on_progress("inference", 100.0)
-                return rows
+                if auto_inputs is not None:
+                    return validate_auto_result(output, len(auto_inputs["words"]))
+                return validate_intervals(output["intervals"])
             finally:
                 if proc.poll() is None:
                     proc.terminate()

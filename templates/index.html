@@ -355,6 +355,7 @@
           {% if apple_silicon %}
           <option value="mps" {% if default_diarization_device == 'mps' %}selected{% endif %}>Pyannote (GPU)</option>
           <option value="coreml" {% if default_diarization_device == 'coreml' %}selected{% endif %}>FluidAudio (Core ML)</option>
+          <option value="intelligent-auto-v5">Intelligent Auto v5 (Experimental)</option>
           <option value="combined">Combined (Experimental)</option>
           {% endif %}
           <option value="cpu" {% if default_diarization_device == 'cpu' %}selected{% endif %}>Pyannote (CPU)</option>
@@ -536,6 +537,11 @@ updateModelRepository();
 
 function updateDiarizationDevice() {
   const single = $('speakerCount').value === '1';
+  const experimental = $('diarizationDevice').querySelector('option[value="intelligent-auto-v5"]');
+  if (experimental) {
+    experimental.disabled = $('speakerCount').value !== 'auto';
+    if (experimental.disabled && experimental.selected && !single) $('diarizationDevice').value = 'mps';
+  }
   $('diarizationDevice').disabled = single;
   $('diarizationDevice').classList.toggle('hidden', single);
   $('diarizationInactive').classList.toggle('hidden', !single);
@@ -543,6 +549,8 @@ function updateDiarizationDevice() {
   updateStartState();
   $('diarizationHint').textContent = single
     ? 'One speaker skips speaker identification.'
+    : $('diarizationDevice').value === 'intelligent-auto-v5'
+      ? 'Experimental, Auto count only. Five cached Pyannote candidates plus FluidAudio acoustic refinement. No proven overall accuracy gain; falls back to Pyannote.'
     : $('diarizationDevice').value === 'combined'
       ? 'Runs FluidAudio and Pyannote. Slower; not shown to improve accuracy consistently.'
       : $('diarizationDevice').value === 'mps'
@@ -741,7 +749,7 @@ async function poll() {
         (r.fallback ? ' (fallback from ' + r.requested + ')' : '')
       : '';
     const d = s.diarization_actual;
-    const deviceNames = {mps: 'Pyannote (GPU)', cpu: 'Pyannote (CPU)', coreml: 'FluidAudio (Core ML)', combined: 'Combined (Experimental)', single: 'Single speaker (no diarization)'};
+    const deviceNames = {mps: 'Pyannote (GPU)', cpu: 'Pyannote (CPU)', coreml: 'FluidAudio (Core ML)', combined: 'Combined (Experimental)', 'intelligent-auto-v5': 'Intelligent Auto v5 (Experimental)', single: 'Single speaker (no diarization)'};
     $('diarizationActual').textContent = d
       ? 'Used: ' + (deviceNames[d.actual] || d.actual) + (d.fallback ? ' (fallback)' : '')
       : '';

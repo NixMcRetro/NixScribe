@@ -372,3 +372,15 @@ require the supplied master artwork.
 - v0.5.0: multi-model comparison and optional local language-model reconciliation, preserving the original transcript evidence. No cloud processing by default.
 
 v0.3.0 establishes MLX and Core ML as the Apple silicon defaults with automatic fallback. [Issue #3](https://github.com/NixMcRetro/NixScribe/issues/3) tracks v0.3.1 combined diarization and accuracy improvements. Parakeet evaluation and the later multi-source stages remain optional future work.
+
+
+## Intelligent Auto v5 (experimental)
+
+Select Auto speaker count on Apple silicon to enable this opt-in research mode.
+It reuses one Pyannote GPU segmentation and embedding pass for five CPU
+clustering candidates, then uses FluidAudio intervals to refine selected
+short speaker labels. It is not the older Combined mode. Pyannote remains
+the default: independent validation did not establish a reliable accuracy
+gain. The experimental mode checks the frozen model and dependency versions
+and reports any fallback to standard Pyannote. Manual counts and one-speaker
+bypass are unchanged. See [validation and release gates](diarization-validation.md).

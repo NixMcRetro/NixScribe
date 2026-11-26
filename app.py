@@ -821,6 +821,9 @@ def _run_job(config: dict[str, Any]) -> None:
         align_elapsed = time.monotonic() - align_started
         requested_device = config.get("diarization_device", default_device())
         combined = requested_device == "combined"
+        intelligent = requested_device == "intelligent-auto-v5"
+        dual = combined or intelligent
+        auto_result = None
         actual_device = "single"
         raw_intervals = {}
         attempts = []
@@ -875,7 +878,7 @@ def _run_job(config: dict[str, Any]) -> None:
                     elif phase == "inference":
                         stage_callback("Identifying speakers",
                                        "Detecting speaker turns with Core ML…",
-                                       84.0, 89.0 if combined else 97.0)(percent)
+                                       84.0, 89.0 if dual else 97.0)(percent)
 
                 try:
                     import pandas as pd
@@ -888,7 +891,7 @@ def _run_job(config: dict[str, Any]) -> None:
                         raise RuntimeError("Core ML returned no speaker intervals for recognized speech")
                     diarize_segments = pd.DataFrame(intervals, columns=["start", "end", "speaker"])
                     actual_device = "coreml"
-                    if combined or diagnostics:
+                    if dual or diagnostics:
                         raw_intervals["coreml"] = intervals
                         attempts.append({"device": "coreml", "status": "success",
                                          "seconds": time.monotonic() - diarize_started})
@@ -899,7 +902,7 @@ def _run_job(config: dict[str, Any]) -> None:
                     raise
                 except Exception as exc:
                     _cancel_if_requested()
-                    if combined or diagnostics:
+                    if dual or diagnostics:
                         attempts.append({"device": "coreml", "status": "failed",
                                          "seconds": time.monotonic() - diarize_started,
                                          "error_type": type(exc).__name__})
@@ -909,12 +912,12 @@ def _run_job(config: dict[str, Any]) -> None:
                     actual_device = "mps"
                     diarize_started = time.monotonic()
 
-            if (diarize_segments is None or combined) and "mps" in candidates:
+            if (diarize_segments is None or dual) and "mps" in candidates:
                 _cancel_if_requested()
                 diarize_started = time.monotonic()
                 _update(stage="Loading diarization",
                         detail="Loading Pyannote Community-1 on Apple GPU (experimental)…",
-                        stage_percent=0.0, overall_percent=89.0 if combined else 83.0)
+                        stage_percent=0.0, overall_percent=89.0 if dual else 83.0)
                 _append_log("Speaker diarization attempt - Pyannote Community-1 (Apple GPU / MPS)")
 
                 def mps_progress(phase: str, percent: float) -> None:
@@ -922,17 +925,40 @@ def _run_job(config: dict[str, Any]) -> None:
                         return
                     stage_callback("Identifying speakers",
                                    "Detecting speaker turns on Apple GPU…",
-                                   89.0 if combined else 84.0, 97.0)(percent)
+                                   89.0 if dual else 84.0, 97.0)(percent)
 
                 try:
                     import pandas as pd
-                    intervals = run_mps(working_input, speaker_count,
-                                        mps_progress, _cancel_if_requested)
+                    # Send only word timings to the isolated experimental worker.
+                    if intelligent and raw_intervals.get("coreml") and aligned_words:
+                        def finite_or_none(value):
+                            return value if isinstance(value, (int, float)) and math.isfinite(value) else None
+                        inputs = {"words": [{"start": finite_or_none(word.get("start")),
+                                             **({"end": finite_or_none(word["end"])} if "end" in word else {})}
+                                            for word in aligned_words],
+                                  "core": raw_intervals["coreml"], "duration": audio_seconds}
+                        auto_result = run_mps(working_input, speaker_count, mps_progress,
+                                              _cancel_if_requested, auto_inputs=inputs)
+                        intervals = auto_result["intervals"]
+                        if auto_result.get("labels") is None:
+                            _append_log("Intelligent Auto v5 fell back to standard Pyannote: "
+                                        + auto_result["fallback_reason"])
+                        else:
+                            _append_log(f"Intelligent Auto v5: {auto_result['selected']}; "
+                                        f"{auto_result['acoustic_changes']} acoustic label changes; "
+                                        "one segmentation and one embedding pass")
+                    else:
+                        if intelligent:
+                            _append_log("Intelligent Auto v5 unavailable: missing Core ML intervals or aligned words; using Pyannote")
+                        intervals = run_mps(working_input, speaker_count,
+                                            mps_progress, _cancel_if_requested)
                     if not intervals and result.get("segments"):
                         raise RuntimeError("GPU diarization returned no speaker intervals for recognized speech")
                     diarize_segments = pd.DataFrame(intervals, columns=["start", "end", "speaker"])
                     actual_device = "combined" if combined and "coreml" in raw_intervals else "mps"
-                    if combined or diagnostics:
+                    if intelligent and auto_result is not None and auto_result.get("labels") is not None:
+                        actual_device = "intelligent-auto-v5"
+                    if dual or diagnostics:
                         raw_intervals["mps"] = intervals
                         attempts.append({"device": "mps", "status": "success",
                                          "seconds": time.monotonic() - diarize_started})
@@ -941,15 +967,19 @@ def _run_job(config: dict[str, Any]) -> None:
                     raise
                 except Exception as exc:
                     _cancel_if_requested()
-                    if combined or diagnostics:
+                    if dual or diagnostics:
                         attempts.append({"device": "mps", "status": "failed",
                                          "seconds": time.monotonic() - diarize_started,
                                          "error_type": type(exc).__name__})
                     _append_log(f"GPU diarization failed: {type(exc).__name__}: {exc}")
                     _append_log(f"MPS attempt elapsed: {time.monotonic() - diarize_started:.1f}s")
-                    if diarize_segments is not None:
+                    if diarize_segments is not None and not intelligent:
                         actual_device = "coreml"
                     else:
+                        if intelligent:
+                            diarize_segments = None
+                            auto_result = None
+                            _append_log("Intelligent Auto v5 unavailable; using standard Pyannote on CPU")
                         _append_log("Retrying speaker diarization on CPU; GPU output discarded")
                         actual_device = "cpu"
                         _update(stage="Loading diarization",
@@ -990,7 +1020,11 @@ def _run_job(config: dict[str, Any]) -> None:
             diarize_elapsed = time.monotonic() - diarize_total_started
             _append_log(f"Diarization elapsed: {diarize_elapsed:.1f}s "
                         f"(device={actual_device}, requested={requested_device}; includes model loading)")
-            if actual_device == "combined":
+            if actual_device == "intelligent-auto-v5":
+                from intelligent_auto import apply_labels
+                _cancel_if_requested()
+                apply_labels(result, auto_result["labels"])
+            elif actual_device == "combined":
                 comparison = apply_reconciliation(result, raw_intervals["coreml"],
                                                   raw_intervals["mps"], _cancel_if_requested)
                 _append_log(f"Combined speaker assignment: {sum(d['uncertain'] for d in comparison['decisions'])} "
@@ -998,6 +1032,8 @@ def _run_job(config: dict[str, Any]) -> None:
             else:
                 if combined:
                     _append_log(f"Combined mode degraded to {actual_device}; only one engine available")
+                if intelligent:
+                    _append_log(f"Intelligent Auto v5 degraded to {actual_device}; standard speaker assignment")
                 result = whisperx.assign_word_speakers(
                     diarize_segments,
                     result,
@@ -1065,7 +1101,7 @@ def _run_job(config: dict[str, Any]) -> None:
                     "recognition": recognition,
                     "speaker_identification": {"requested": requested_device, "actual": actual_device,
                                                "requested_count": speaker_count,
-                                               "degraded": combined and actual_device not in ("combined", "single")},
+                                               "degraded": dual and actual_device not in (requested_device, "single")},
                     "versions": {"whisperx": wx_ver, "torch": str(torch.__version__),
                                  "pyannote.audio": package_version("pyannote.audio"),
                                  "mlx-whisper": package_version("mlx-whisper"), "FluidAudio": "0.18.4"},
@@ -1075,6 +1111,10 @@ def _run_job(config: dict[str, Any]) -> None:
                                 "diarization": diarize_elapsed if speaker_count != 1 else 0.0},
                     "attempts": attempts, "aligned_words": aligned_snapshot,
                     "raw_intervals": raw_intervals, "reconciliation": comparison,
+                    "intelligent_auto": ({k: v for k, v in auto_result.items()
+                                          if k in ("selected", "acoustic_changes", "fallback_reason",
+                                                   "segmentation_calls", "embedding_calls")}
+                                         if auto_result is not None else None),
                     "assigned_speakers": [w.get("speaker", "UNKNOWN") for w in final_words],
                 })
                 output_files.append(str(diagnostic_path))
@@ -1393,8 +1433,10 @@ def start_job():
 
     if config["diarization_device"] not in DIARIZATION_DEVICES:
         return jsonify({"ok": False, "error": "Unsupported speaker identification device."}), 400
-    if config["diarization_device"] == "combined" and not apple_silicon():
-        return jsonify({"ok": False, "error": "Combined speaker identification requires Apple silicon."}), 400
+    if config["diarization_device"] in {"combined", "intelligent-auto-v5"} and not apple_silicon():
+        return jsonify({"ok": False, "error": "Experimental dual-engine speaker identification requires Apple silicon."}), 400
+    if config["diarization_device"] == "intelligent-auto-v5" and speaker_count not in (None, 1):
+        return jsonify({"ok": False, "error": "Intelligent Auto v5 requires Auto speaker count; use Pyannote for manual counts."}), 400
     if config["model"] not in ALL_MODEL_IDS:
         return jsonify({"ok": False, "error": "Unsupported model selection."}), 400
     if config["model"] in MLX_REPOSITORIES:
