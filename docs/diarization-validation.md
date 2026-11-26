@@ -24,7 +24,7 @@ Do not tune on this now-unblinded cohort and describe it as independent.
 
 ## Experimental v5 integration gate
 
-The draft app integrates the frozen reference-free selector and acoustic-short
+The released v0.3.1 app integrates the frozen reference-free selector and acoustic-short
 adjustment as **Intelligent Auto v5 (Experimental)**. It is available only
 with automatic speaker count on Apple silicon. Its isolated worker captures
 Pyannote segmentation and embeddings once, then moves to CPU for five cached
@@ -42,9 +42,11 @@ is persisted by the production worker. The source algorithm functions were
 extracted from the verified archive (SHA-256
 `b7ab64c45ed4c0e26344490bec190ea9c2ea656b3b073df5051425202a5bb029`).
 
-**Release gate:** synthetic unit tests do not establish real-audio production
-parity. Verify the production cache-only implementation against all 15
-development clips and the frozen independent predictions without tuning,
-then perform physical Apple silicon checks of the packaged worker, fallback,
-cancellation, single/manual speaker count and exports. Do not claim a
-generalised accuracy improvement.
+**Validation status (26 November 2026):** the production cache-only algorithm
+matched all 15 development clips and 30 frozen independent predictions exactly,
+including candidate labels, intervals, selection and final word labels. The
+macOS automated release build passed. The owner approved direct publication;
+physical Apple silicon checks of the packaged worker, fallback, cancellation,
+single/manual speaker count and exports remain outstanding. Cache parity is
+not end-to-end native inference validation. Do not claim a generalised accuracy
+improvement.
