@@ -45,4 +45,5 @@ test('counts and optional Australian spelling hint preserve original context', (
   ctx.addAustralianSpelling();
   assert.equal($('initialPrompt').value, 'Use Australian English spelling.\n\n  café  repair  ');
   assert.match($('promptCount').textContent, /^6 words/);
+  assert.match(html, /Recognition can echo prompt text as speech/);
 });

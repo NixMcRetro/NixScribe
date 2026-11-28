@@ -138,7 +138,11 @@ carrying generated text from earlier batches. The installed-source contract
 checks the pipeline dispatch and model implementation separately. Do not
 enable previous-text conditioning globally as a substitute for fixed prompt
 persistence. The Australian English button remains an editable hint, not a
-spelling rewrite. Activity logs and recognition metadata include engine,
+spelling rewrite. Recognition can echo prompt text as speech, even with
+previous-text conditioning disabled. Keep hints brief, review unexpected
+repetition and omit optional hints when testing suspected prompt leakage.
+No automatic deletion of matching transcript text is performed.
+Activity logs and recognition metadata include engine,
 counts and budget, not prompt text or token IDs; fields are not
 persisted automatically. Save and load vocabulary profiles using native file
 choosers. Profiles contain both original fields as plaintext JSON, saved
