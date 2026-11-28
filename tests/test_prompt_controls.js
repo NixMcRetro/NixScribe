@@ -34,16 +34,16 @@ test('MLX and CPU preserve both editable inputs', () => {
   assert.equal($('initialPrompt').value, 'Technical interview');
   assert.match(html, /hotwords: \$\('hotwords'\)\.value\.trim\(\)/);
 });
-test('counts and optional Australian spelling hint preserve original context', () => {
+test('counts preserve original context without inserting instructions', () => {
   const {$, ctx} = setup();
   $('initialPrompt').value = '  café  repair  ';
   $('hotwords').value = 'one two';
   ctx.updatePromptCounts();
   assert.equal($('promptCount').textContent, '2 words · 12 characters');
   assert.equal($('hotwordsCount').textContent, '2 words · 7 characters');
-  ctx.addAustralianSpelling();
-  ctx.addAustralianSpelling();
-  assert.equal($('initialPrompt').value, 'Use Australian English spelling.\n\n  café  repair  ');
-  assert.match($('promptCount').textContent, /^6 words/);
+  assert.equal($('initialPrompt').value, '  café  repair  ');
+  assert.equal($('hotwords').value, 'one two');
+  assert.doesNotMatch(html, /australianSpellingBtn|addAustralianSpelling/);
+  assert.match(html, /brief descriptive context/);
   assert.match(html, /Recognition can echo prompt text as speech/);
 });

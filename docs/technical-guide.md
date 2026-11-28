@@ -137,8 +137,10 @@ prompt from the original user context and hotwords for each batch, without
 carrying generated text from earlier batches. The installed-source contract
 checks the pipeline dispatch and model implementation separately. Do not
 enable previous-text conditioning globally as a substitute for fixed prompt
-persistence. The Australian English button remains an editable hint, not a
-spelling rewrite. Recognition can echo prompt text as speech, even with
+persistence. Use brief descriptive context rather than instruction-style
+spelling prompts. The spelling-instruction insertion button was removed;
+existing editable prompts and saved profiles are not rewritten. Recognition
+can echo prompt text as speech, even with
 previous-text conditioning disabled. Keep hints brief, review unexpected
 repetition and omit optional hints when testing suspected prompt leakage.
 No automatic deletion of matching transcript text is performed.

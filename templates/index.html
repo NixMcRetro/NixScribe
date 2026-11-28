@@ -376,9 +376,8 @@
         <textarea id="initialPrompt" aria-describedby="promptCount promptHint" placeholder="Example: An Australian English technical interview about computer repair."></textarea>
         <div class="prompt-tools">
           <span id="promptCount" class="hint">0 words · 0 characters</span>
-          <button id="australianSpellingBtn" type="button">Add Australian English spelling hint</button>
         </div>
-        <div id="promptHint" class="hint">Keep context concise and prioritise essential vocabulary. Token counts use the selected engine’s local tokenizer; counts are unavailable until its tokenizer is cached. Spelling hints guide recognition but do not guarantee spelling or rewrite the transcript. Recognition can echo prompt text as speech; keep hints brief and review unexpected repetition.</div>
+        <div id="promptHint" class="hint">Keep context concise and prioritise essential vocabulary. Token counts use the selected engine’s local tokenizer; counts are unavailable until its tokenizer is cached. Use brief descriptive context (for example, Australian English technical interview), not instructions to the recogniser. Recognition can echo prompt text as speech. Context does not guarantee spelling; review unexpected repetition.</div>
       </div>
       <div id="hotwordsField">
         <label for="hotwords">Custom vocabulary / hotwords</label>
@@ -599,18 +598,8 @@ async function refreshPromptPreview(revision) {
     if (revision === promptRevision) $('promptBudget').textContent = e.message || 'Local tokenizer unavailable.';
   }
 }
-function addAustralianSpelling() {
-  const field = $('initialPrompt');
-  const hint = 'Use Australian English spelling.';
-  if (!field.value.includes(hint)) {
-    field.value = hint + (field.value.trim() ? '\n\n' + field.value : '');
-  }
-  updatePromptCounts();
-  field.focus();
-}
 $('initialPrompt').addEventListener('input', updatePromptCounts);
 $('hotwords').addEventListener('input', updatePromptCounts);
-$('australianSpellingBtn').addEventListener('click', addAustralianSpelling);
 updatePromptCounts();
 
 async function vocabularyProfile(action) {

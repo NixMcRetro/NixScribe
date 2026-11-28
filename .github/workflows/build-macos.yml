@@ -119,7 +119,8 @@ jobs:
               curl -fsS -X POST -H 'Content-Type: application/json' -H 'X-NixScribe-Action: prompt-preview' -d '{"model":"mlx-large-v3","initial_prompt":"A technical interview.","hotwords":"oscilloscope"}' http://127.0.0.1:8765/api/prompt-preview > /tmp/nixscribe-prompt.json
               python -c 'import json; p=json.load(open("/tmp/nixscribe-prompt.json")); assert p["available"] and not p["over_limit"] and p["effective_tokens"] > 0 and p["initial_prompt"] == "A technical interview.\n\noscilloscope" and p["hotwords"] == ""'
               grep -q 'id="hotwordsHint"' /tmp/nixscribe-index.html
-              grep -q 'id="australianSpellingBtn"' /tmp/nixscribe-index.html
+              grep -Fq 'Use brief descriptive context' /tmp/nixscribe-index.html
+              if grep -Fq 'id="australianSpellingBtn"' /tmp/nixscribe-index.html; then exit 1; fi
               grep -q 'class="brand-icon"' /tmp/nixscribe-index.html
               curl -fsS "http://127.0.0.1:8765/branding/icon.png" -o /tmp/nixscribe-icon.png
               file /tmp/nixscribe-icon.png | grep -q 'PNG image data'
