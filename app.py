@@ -554,6 +554,8 @@ def _run_job(config: dict[str, Any]) -> None:
     caffeinate_proc: subprocess.Popen[Any] | None = None
     project_dir: Path | None = None
     work_dir: Path | None = None
+    exports_complete = False
+    final_state: dict[str, Any] = {}
     try:
         import torch
         import whisperx
@@ -1070,12 +1072,14 @@ def _run_job(config: dict[str, Any]) -> None:
             stage_percent=10.0,
             overall_percent=97.3,
         )
+        _cancel_if_requested()
         result["language"] = "en"
         txt_path = _write_txt(
             result, input_path, project_dir,
             group_turns=config["txt_group_turns"],
         )
         _update(stage_percent=55.0, overall_percent=98.5)
+        _cancel_if_requested()
         srt_path = _write_srt(
             result, input_path, project_dir,
             include_speakers=config["srt_speaker_labels"],
@@ -1083,11 +1087,11 @@ def _run_job(config: dict[str, Any]) -> None:
             max_lines=config["srt_max_lines"],
             max_duration=config["srt_max_duration"],
         )
+        exports_complete = True
         _update(stage_percent=85.0, overall_percent=99.2)
 
         output_files = [str(txt_path), str(srt_path)]
         if diagnostics:
-            _cancel_if_requested()
             def package_version(name):
                 try:
                     return importlib.metadata.version(name)
@@ -1127,9 +1131,7 @@ def _run_job(config: dict[str, Any]) -> None:
         if len(preview) > 120_000:
             preview = preview[:120_000] + "\n\n[Preview truncated in UI; full file is on disk.]\n"
 
-        _update(
-            running=False,
-            cancel_requested=False,
+        final_state = dict(
             status="Complete",
             stage="Complete",
             detail=f"Finished. Wrote {len(output_files)} files.",
@@ -1144,32 +1146,26 @@ def _run_job(config: dict[str, Any]) -> None:
             projects_dir=str(projects_dir),
             project_dir=str(project_dir),
         )
-        if work_dir is not None and work_dir.exists():
-            shutil.rmtree(work_dir)
-            _append_log("Temporary working WAV removed")
-
         _append_log(f"Transcript: {txt_path}")
         _append_log(f"Subtitles: {srt_path}")
         _append_log("Job complete")
 
     except JobCancelled:
-        if project_dir is not None and project_dir.exists():
+        if not exports_complete and project_dir is not None and project_dir.exists():
             try:
                 shutil.rmtree(project_dir)
                 _append_log("Removed incomplete project folder")
             except Exception:
                 _append_log("Could not remove the incomplete project folder")
         _append_log("Job cancelled")
-        _update(
-            running=False,
-            cancel_requested=False,
+        final_state = dict(
             status="Cancelled",
             stage="Cancelled",
             detail="The transcription was cancelled.",
             error=None,
         )
     except Exception as exc:
-        if project_dir is not None and project_dir.exists():
+        if not exports_complete and project_dir is not None and project_dir.exists():
             try:
                 shutil.rmtree(project_dir)
                 _append_log("Removed incomplete project folder after error")
@@ -1178,20 +1174,14 @@ def _run_job(config: dict[str, Any]) -> None:
         error_text = f"{type(exc).__name__}: {exc}"
         _append_log(error_text)
         _append_log(traceback.format_exc())
-        _update(
-            running=False,
-            cancel_requested=False,
+        final_state = dict(
             status="Error",
             stage="Error",
             detail=error_text,
             error=error_text,
         )
     finally:
-        if work_dir is not None and work_dir.exists():
-            try:
-                shutil.rmtree(work_dir)
-            except Exception:
-                _append_log("Could not remove temporary working audio directory")
+        _remove_work_dir(work_dir)
         if caffeinate_proc is not None:
             try:
                 caffeinate_proc.terminate()
@@ -1201,7 +1191,19 @@ def _run_job(config: dict[str, Any]) -> None:
                     caffeinate_proc.kill()
                 except Exception:
                     pass
-        _torch_cleanup()
+        try:
+            _torch_cleanup()
+        finally:
+            _update(running=False, cancel_requested=False, **final_state)
+
+
+def _remove_work_dir(work_dir: Path | None) -> None:
+    try:
+        if work_dir is not None and work_dir.exists():
+            shutil.rmtree(work_dir)
+            _append_log("Temporary working WAV removed")
+    except OSError:
+        _append_log("Could not remove temporary working audio directory")
 
 
 def _scan_audio_files() -> list[str]:
@@ -1447,32 +1449,40 @@ def start_job():
     if config["compute_type"] not in {"float32", "int8"}:
         return jsonify({"ok": False, "error": "Unsupported compute type."}), 400
 
-    _update(
-        running=True,
-        cancel_requested=False,
-        status="Starting",
-        stage="Starting",
-        stage_percent=0.0,
-        overall_percent=0.0,
-        detail="Preparing transcription job…",
-        started_at=time.time(),
-        elapsed_seconds=0.0,
-        input_file=input_file,
-        projects_dir=projects_dir,
-        project_dir=None,
-        files=[],
-        preview="",
-        live_preview="",
-        live_position="Preparing transcription…",
-        live_segment_count=0,
-        log=[],
-        recognition=None,
-        diarization_actual=None,
-        error=None,
-        detected_speakers=[],
-        settings=config,
-    )
-    threading.Thread(target=_run_job, args=(config,), daemon=True).start()
+    with state_lock:
+        if STATE.get("running"):
+            return jsonify({"ok": False, "error": "A transcription is already running."}), 409
+        _update(
+            running=True,
+            cancel_requested=False,
+            status="Starting",
+            stage="Starting",
+            stage_percent=0.0,
+            overall_percent=0.0,
+            detail="Preparing transcription job…",
+            started_at=time.time(),
+            elapsed_seconds=0.0,
+            input_file=input_file,
+            projects_dir=projects_dir,
+            project_dir=None,
+            files=[],
+            preview="",
+            live_preview="",
+            live_position="Preparing transcription…",
+            live_segment_count=0,
+            log=[],
+            recognition=None,
+            diarization_actual=None,
+            error=None,
+            detected_speakers=[],
+            settings=config,
+        )
+        try:
+            threading.Thread(target=_run_job, args=(config,), daemon=True).start()
+        except RuntimeError as exc:
+            _update(running=False, cancel_requested=False, status="Error", stage="Error",
+                    detail="Could not start transcription.", error=str(exc))
+            return jsonify({"ok": False, "error": "Could not start transcription."}), 500
     return jsonify({"ok": True})
 
 

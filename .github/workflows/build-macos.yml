@@ -45,6 +45,9 @@ jobs:
           chmod +x build_macos_app.sh
           ./build_macos_app.sh
 
+      - name: Test application job lifecycle without inference
+        run: .build-venv/bin/python -m unittest discover -s tests -p "test_job_lifecycle.py" -v
+
       - name: Verify macOS bundle
         run: |
           file "dist/NixScribe.app/Contents/MacOS/NixScribe"
