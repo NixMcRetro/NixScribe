@@ -129,8 +129,14 @@ on the joined string, not inferred by adding two independent counts. The
 pinned MLX source contract is tested in CI: the initial prompt is seeded before
 decoding and reset after a decoded window when condition_on_previous_text is
 False (or high temperature). No change to this default or guaranteed prompt
-persistence is claimed. WhisperX's batched CPU path constructs its prompt for
-each batch. The Australian English button remains an editable hint, not a
+persistence is claimed. In the pinned MLX decoder, later decoded windows
+can lose the fixed user prompt when previous-text conditioning is disabled.
+This differs from WhisperX's batched CPU path: its model constructs a fresh
+prompt from the original user context and hotwords for each batch, without
+carrying generated text from earlier batches. The installed-source contract
+checks the pipeline dispatch and model implementation separately. Do not
+enable previous-text conditioning globally as a substitute for fixed prompt
+persistence. The Australian English button remains an editable hint, not a
 spelling rewrite. Activity logs and recognition metadata include engine,
 counts and budget, not prompt text or token IDs; fields are not
 persisted automatically. Save and load vocabulary profiles using native file
@@ -355,7 +361,7 @@ TXT now contains speaker-labelled paragraphs without timestamps, e.g.
 `[SPEAKER_00] Hello.`. Consecutive segments from the same speaker are combined
 by default; turn off that option if you want a paragraph for each segment.
 
-SRT keeps timestamps. It normally includes speaker labels, a maximum of two
+SRT keeps timestamps. Speaker labels are optional and off by default, with a maximum of two
 lines, 42 characters per line, and six seconds per cue. The export controls let
 you toggle SRT speaker labels and change width, line count and cue duration.
 Both exports and the final preview split recognition segments at actual

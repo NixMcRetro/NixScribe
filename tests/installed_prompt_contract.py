@@ -12,7 +12,7 @@ from mlx_whisper import transcribe
 from mlx_whisper.decoding import DecodingTask
 from mlx_whisper.tokenizer import get_tokenizer
 from faster_whisper.transcribe import WhisperModel
-from whisperx.asr import FasterWhisperPipeline
+from whisperx.asr import FasterWhisperPipeline, WhisperModel as WhisperXModel
 from prompt_handling import prepare_prompt
 
 
@@ -53,9 +53,16 @@ class InstalledPromptContract(unittest.TestCase):
         self.assertIn('tokenizer.encode(" " + hotwords.strip())', source)
         self.assertIn("hotwords_tokens[: self.max_length // 2 - 1]", source)
         self.assertIn("previous_tokens[-(self.max_length // 2 - 1) :]", source)
-        source = inspect.getsource(FasterWhisperPipeline)
-        self.assertIn('tokenizer.encode(initial_prompt)', source)
-        self.assertIn('hotwords=options.hotwords', source)
+        pipeline = inspect.getsource(FasterWhisperPipeline._forward)
+        self.assertIn("self.model.generate_segment_batched(", pipeline)
+        source = inspect.getsource(WhisperXModel.generate_segment_batched)
+        self.assertIn("all_tokens = []", source)
+        self.assertIn('initial_prompt = " " + options.initial_prompt.strip()', source)
+        self.assertIn("tokenizer.encode(initial_prompt)", source)
+        self.assertIn("all_tokens.extend(initial_prompt_tokens)", source)
+        self.assertIn("previous_tokens = all_tokens[prompt_reset_since:]", source)
+        self.assertIn("hotwords=options.hotwords", source)
+        self.assertIn("[prompt] * batch_size", source)
 
 
 if __name__ == "__main__":
