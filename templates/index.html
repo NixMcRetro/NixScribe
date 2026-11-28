@@ -312,7 +312,7 @@
           {% endfor %}
           </optgroup>
           {% endif %}
-          <optgroup label="Faster-Whisper – CPU">
+          <optgroup label="WhisperX (CPU)">
           {% for model_id, model_label in models %}
           <option value="{{ model_id }}" data-engine="cpu" data-repository="{{ model_repositories[model_id] }}" data-description="{{ model_descriptions[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
           {% endfor %}
@@ -321,12 +321,12 @@
         <div class="hint">Model repository on Hugging Face:</div>
         <div id="modelRepository" class="model-repository">{{ mlx_repositories.get(default_model) or model_repositories.get(default_model) }}</div>
         <div id="engineHint" class="hint"></div>
-        <div class="hint">Default: Faster-Whisper large-v3 on CPU with speech detection. Accelerated models are optional.</div>
+        <div class="hint">Default: WhisperX large-v3 (quality-first, full model) on CPU, using Faster-Whisper and speech detection. Accelerated models are optional.</div>
         </div>
         <div class="field-group">
           <label id="precisionLabel" for="computeType">Recognition precision</label>
           <select id="computeType">
-            <option value="float32" selected>FP32 (float32) - full precision</option>
+            <option value="float32" selected>FP32 (float32) - maximum fidelity (full precision)</option>
             <option value="int8">INT8 - reduced memory</option>
           </select>
           <input id="mlxPrecision" class="hidden" type="text" value="FP16 (float16)" readonly>

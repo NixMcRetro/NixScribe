@@ -126,6 +126,8 @@ jobs:
               grep -q 'value="cpu" selected' /tmp/nixscribe-index.html
               grep -q 'value="auto" selected' /tmp/nixscribe-index.html
               grep -q 'value="float32" selected' /tmp/nixscribe-index.html
+              grep -Fq '<optgroup label="WhisperX (CPU)">' /tmp/nixscribe-index.html
+              grep -Fq 'FP32 (float32) - maximum fidelity (full precision)' /tmp/nixscribe-index.html
               grep -q 'id="exportLogBtn"' /tmp/nixscribe-index.html
               grep -q 'id="recognitionActual"' /tmp/nixscribe-index.html
               grep -q 'value="intelligent-auto-v5"' /tmp/nixscribe-index.html
