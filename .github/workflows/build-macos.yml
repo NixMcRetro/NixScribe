@@ -49,7 +49,9 @@ jobs:
           ./build_macos_app.sh
 
       - name: Test application job lifecycle without inference
-        run: .build-venv/bin/python -m unittest discover -s tests -p "test_job_lifecycle.py" -v
+        run: |
+          .build-venv/bin/python -m unittest discover -s tests -p "test_job_lifecycle.py" -v
+          .build-venv/bin/python -m unittest discover -s tests -p "test_native_app.py" -v
 
       - name: Verify prompt preparation and pinned decoder contract without inference
         run: |

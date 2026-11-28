@@ -73,7 +73,7 @@ dist/NixScribe.app
 dist/NixScribe-macOS-arm64.zip
 ```
 
-Drag `NixScribe.app` to `/Applications` and launch it from Finder or Spotlight.
+Drag `NixScribe.app` to `/Applications` and launch it from Finder or Spotlight. The native window binds to an available loopback port automatically; it does not stop other processes or reuse their servers. Browser mode (`--browser`) retains port 8765 by default. An explicit `WHISPERX_UI_PORT` environment setting overrides the automatic native port selection.
 
 The build script applies an ad-hoc signature suitable for a locally built personal application. Developer ID signing and notarisation are separate distribution steps. macOS may block downloaded, unnotarised builds; only approve an app you have verified and trust. See Apple's [guidance on opening apps safely](https://support.apple.com/en-au/102445), or build from source.
 

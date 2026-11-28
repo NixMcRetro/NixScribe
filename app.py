@@ -1739,10 +1739,10 @@ if __name__ == "__main__":
         print("Native macOS WebKit backend imports OK")
         raise SystemExit(0)
 
-    print(f"{APP_NAME}: http://{APP_HOST}:{APP_PORT}")
     print(f"Work directory: {DEFAULT_WORKDIR}")
 
     if os.environ.get("WHISPERX_UI_NO_BROWSER") == "1" or "--browser" in sys.argv or sys.platform != "darwin":
+        print(f"{APP_NAME}: http://{APP_HOST}:{APP_PORT}")
         if os.environ.get("WHISPERX_UI_NO_BROWSER") != "1":
             threading.Timer(0.8, _open_browser).start()
         app.run(host=APP_HOST, port=APP_PORT, debug=False, threaded=True, use_reloader=False)
