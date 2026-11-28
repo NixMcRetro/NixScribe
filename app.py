@@ -32,7 +32,7 @@ from app_config import (DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VE
 from mlx_backend import transcribe_mlx
 from model_cache import prepare_model, repository_for
 from prompt_handling import (PromptError, prepare_prompt, require_prompt,
-                             prompt_fields, prompt_metadata)
+                             prompt_fields, prompt_metadata, save_profile, load_profile)
 from audio_export import export_mp3, mp3_destination
 from activity_log import export_activity_log
 from app_config import MODEL_DESCRIPTIONS
@@ -1405,6 +1405,44 @@ def prompt_preview():
         return jsonify(plan)
     except PromptError as exc:
         return jsonify({"error": str(exc)}), 400
+
+
+@app.post("/api/prompt-profile")
+def vocabulary_profile():
+    if not request.is_json or request.headers.get("X-NixScribe-Action") != "prompt-profile":
+        return jsonify({"error": "Invalid vocabulary profile request."}), 400
+    origin = request.headers.get("Origin")
+    if origin and origin != request.host_url.rstrip("/"):
+        return jsonify({"error": "Invalid vocabulary profile origin."}), 403
+    if sys.platform != "darwin":
+        return jsonify({"error": "Native vocabulary profiles require macOS."}), 400
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or payload.get("action") not in ("save", "load"):
+        return jsonify({"error": "Invalid vocabulary profile action."}), 400
+    try:
+        saving = payload["action"] == "save"
+        if saving:
+            prompt_fields(payload)
+        script = ('POSIX path of (choose file name with prompt "Save a private vocabulary profile" '
+                  'default name "NixScribe-vocabulary.json")' if saving else
+                  'POSIX path of (choose file with prompt "Load a NixScribe vocabulary profile")')
+        proc = subprocess.run(["/usr/bin/osascript", "-e", script],
+                              capture_output=True, text=True, timeout=300)
+        if proc.returncode != 0:
+            return jsonify({"cancelled": True})
+        path = Path(proc.stdout.rstrip("\n"))
+        if saving:
+            if path.suffix.lower() != ".json":
+                path = path.with_name(path.name + ".json")
+            save_profile(path, payload)
+            return jsonify({"saved": True, "name": path.name})
+        return jsonify(load_profile(path))
+    except FileExistsError:
+        return jsonify({"error": "Profile already exists. Choose a new filename."}), 409
+    except PromptError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        return jsonify({"error": "Could not read or save the local vocabulary profile."}), 500
 
 
 @app.post("/api/start")

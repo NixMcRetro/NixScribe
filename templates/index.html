@@ -387,6 +387,12 @@
         <div id="hotwordsHint" class="hint"></div>
       </div>
     </div>
+    <div class="prompt-tools">
+      <button id="saveVocabularyBtn" type="button">Save vocabulary profile…</button>
+      <button id="loadVocabularyBtn" type="button">Load vocabulary profile…</button>
+      <span id="vocabularyStatus" class="hint" role="status"></span>
+    </div>
+    <div class="hint">Profiles are explicit, local plaintext JSON files containing both fields. Loading replaces the current fields. Nothing is saved automatically.</div>
     <details class="advanced" open>
       <summary>Effective recognition prompt (local preview)</summary>
       <div id="promptBudget" class="hint" role="status" aria-live="polite">Checking local tokenizer…</div>
@@ -606,6 +612,37 @@ $('initialPrompt').addEventListener('input', updatePromptCounts);
 $('hotwords').addEventListener('input', updatePromptCounts);
 $('australianSpellingBtn').addEventListener('click', addAustralianSpelling);
 updatePromptCounts();
+
+async function vocabularyProfile(action) {
+  if (action === 'load' && ($('initialPrompt').value || $('hotwords').value) &&
+      !window.confirm('Replace the current initial prompt and vocabulary with a saved profile?')) return;
+  $('saveVocabularyBtn').disabled = $('loadVocabularyBtn').disabled = true;
+  $('vocabularyStatus').textContent = '';
+  try {
+    const payload = {action};
+    if (action === 'save') {
+      payload.initial_prompt = $('initialPrompt').value;
+      payload.hotwords = $('hotwords').value;
+    }
+    const data = await jsonFetch('/api/prompt-profile', {
+      method:'POST', headers:{'Content-Type':'application/json', 'X-NixScribe-Action':'prompt-profile'},
+      body:JSON.stringify(payload)
+    });
+    if (data.cancelled) return;
+    if (action === 'load') {
+      $('initialPrompt').value = data.initial_prompt;
+      $('hotwords').value = data.hotwords;
+      updatePromptCounts();
+    }
+    $('vocabularyStatus').textContent = action === 'save' ? 'Saved: ' + data.name : 'Profile loaded.';
+  } catch (e) {
+    $('vocabularyStatus').textContent = e.message;
+  } finally {
+    $('saveVocabularyBtn').disabled = $('loadVocabularyBtn').disabled = false;
+  }
+}
+$('saveVocabularyBtn').addEventListener('click', () => vocabularyProfile('save'));
+$('loadVocabularyBtn').addEventListener('click', () => vocabularyProfile('load'));
 
 function updateDiarizationDevice() {
   const single = $('speakerCount').value === '1';

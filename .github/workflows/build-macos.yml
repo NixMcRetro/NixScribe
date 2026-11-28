@@ -113,6 +113,7 @@ jobs:
               grep -q 'id="mlxPrecision"' /tmp/nixscribe-index.html
               grep -q 'id="promptCount"' /tmp/nixscribe-index.html
               grep -q 'id="effectivePrompt"' /tmp/nixscribe-index.html
+              grep -q 'id="saveVocabularyBtn"' /tmp/nixscribe-index.html
               curl -fsS -X POST -H 'Content-Type: application/json' -H 'X-NixScribe-Action: prompt-preview' -d '{"model":"mlx-large-v3","initial_prompt":"A technical interview.","hotwords":"oscilloscope"}' http://127.0.0.1:8765/api/prompt-preview > /tmp/nixscribe-prompt.json
               python -c 'import json; p=json.load(open("/tmp/nixscribe-prompt.json")); assert p["available"] and not p["over_limit"] and p["effective_tokens"] > 0 and p["initial_prompt"] == "A technical interview.\n\noscilloscope" and p["hotwords"] == ""'
               grep -q 'id="hotwordsHint"' /tmp/nixscribe-index.html

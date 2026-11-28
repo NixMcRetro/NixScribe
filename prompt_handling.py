@@ -1,6 +1,9 @@
 """Local prompt preparation shared by preview, validation and recognition."""
 from __future__ import annotations
+import json
+import os
 from pathlib import Path
+import tempfile
 from app_config import MODEL_IDS, MLX_REPOSITORIES, MODEL_REPOSITORIES
 
 # MLX retains the last 223 prompt tokens. Faster-Whisper caps each field
@@ -87,3 +90,51 @@ def require_prompt(plan):
 def prompt_metadata(plan):
     return {key: plan[key] for key in ("engine", "initial_tokens", "vocabulary_tokens",
                                       "effective_tokens", "limit")}
+
+# Only explicit profile save/load actions persist user text.
+PROFILE_MAX_BYTES = 256 * 1024
+
+
+def _profile_data(payload):
+    if not isinstance(payload, dict):
+        raise PromptError("Invalid vocabulary profile.")
+    prompt_fields(payload)
+    return {"schema": 1, "initial_prompt": payload.get("initial_prompt", ""),
+            "hotwords": payload.get("hotwords", "")}
+
+
+def save_profile(path, payload):
+    data = _profile_data(payload)
+    path = Path(path)
+    temp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                         dir=path.parent, prefix=".nixscribe-profile-",
+                                         delete=False) as f:
+            temp = Path(f.name)
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.link(temp, path)
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
+
+
+def load_profile(path):
+    path = Path(path)
+    if not path.is_file():
+        raise PromptError("Choose a regular vocabulary profile file.")
+    with path.open("rb") as f:
+        raw = f.read(PROFILE_MAX_BYTES + 1)
+    if len(raw) > PROFILE_MAX_BYTES:
+        raise PromptError("Vocabulary profile is too large.")
+    try:
+        data = json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise PromptError("Invalid vocabulary profile JSON.") from None
+    if (not isinstance(data, dict) or set(data) != {"schema", "initial_prompt", "hotwords"}
+            or type(data["schema"]) is not int or data["schema"] != 1):
+        raise PromptError("Unsupported vocabulary profile format.")
+    return _profile_data(data)

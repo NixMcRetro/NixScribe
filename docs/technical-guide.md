@@ -133,7 +133,11 @@ persistence is claimed. WhisperX's batched CPU path constructs its prompt for
 each batch. The Australian English button remains an editable hint, not a
 spelling rewrite. Activity logs and recognition metadata include engine,
 counts and budget, not prompt text or token IDs; fields are not
-persisted automatically. The MLX API does not provide the existing
+persisted automatically. Save and load vocabulary profiles using native file
+choosers. Profiles contain both original fields as plaintext JSON, saved
+with owner-only permissions and no overwrite. They can contain sensitive
+terms; choose a private local folder. Loading validates the schema and size
+before replacing the fields, and asks for confirmation if either is populated. The MLX API does not provide the existing
 WhisperX progress callback, so during recognition the app reports the active
 stage without pretending to know its percentage. The transcript appears after
 that pass. A failed MLX download or inference automatically retries the matching CPU model (large-v3 or large-v3-turbo) in float32. Cancellation never starts a fallback. Both attempted and successful models are logged. The GPU and CPU

@@ -1,8 +1,11 @@
 """No audio, model loading, or network required."""
 import importlib.util
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
-from prompt_handling import prepare_prompt, require_prompt, PromptError, prompt_metadata
+from prompt_handling import (prepare_prompt, require_prompt, PromptError, prompt_metadata,
+                             save_profile, load_profile)
 
 
 class PromptTests(unittest.TestCase):
@@ -50,6 +53,29 @@ class PromptTests(unittest.TestCase):
         with patch("prompt_handling._mlx_encoder", side_effect=ValueError("PRIVATE")):
             with self.assertRaisesRegex(PromptError, "^Could not count prompt tokens"):
                 prepare_prompt("mlx-large-v3", "PRIVATE", "")
+
+
+class VocabularyProfileTests(unittest.TestCase):
+    def test_roundtrip_exact_text_and_no_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "profile.json"
+            fields = {"initial_prompt": "  café\n", "hotwords": "  names, terminology "}
+            save_profile(path, fields)
+            self.assertEqual(load_profile(path), {"schema": 1, **fields})
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            before = path.read_bytes()
+            with self.assertRaises(FileExistsError):
+                save_profile(path, {"hotwords": "different"})
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_bad_or_oversize_profile_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "profile.json"
+            for invalid in ('{"schema":2,"initial_prompt":"","hotwords":""}',
+                            '{"schema":1,"initial_prompt":7,"hotwords":""}', "x" * 262145):
+                path.write_text(invalid)
+                with self.assertRaises(PromptError):
+                    load_profile(path)
 
 
 @unittest.skipUnless(importlib.util.find_spec("flask"), "Requires build venv")

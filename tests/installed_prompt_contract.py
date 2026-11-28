@@ -3,6 +3,11 @@ import importlib.metadata
 import inspect
 import unittest
 from types import SimpleNamespace
+from pathlib import Path
+import tempfile
+from tokenizers import Tokenizer
+from tokenizers.models import WordLevel
+from tokenizers.pre_tokenizers import Whitespace
 from mlx_whisper import transcribe
 from mlx_whisper.decoding import DecodingTask
 from mlx_whisper.tokenizer import get_tokenizer
@@ -31,6 +36,15 @@ class InstalledPromptContract(unittest.TestCase):
         plan = prepare_prompt("mlx-large-v3", "A technical interview.", "Soldering, oscilloscope")
         self.assertEqual(plan["effective_tokens"],
                          len(tokenizer.encode(" " + plan["initial_prompt"])))
+
+    def test_cpu_tokenizer_from_local_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            tokenizer = Tokenizer(WordLevel({"[UNK]":0, "context":1, "name":2}, unk_token="[UNK]"))
+            tokenizer.pre_tokenizer = Whitespace()
+            tokenizer.save(str(Path(directory) / "tokenizer.json"))
+            plan = prepare_prompt("large-v3", "context", "name name", snapshot=Path(directory))
+            self.assertEqual(plan["effective_tokens"], 3)
+            self.assertEqual(plan["vocabulary_tokens"], 2)
 
     def test_exact_cpu_source_contract(self):
         self.assertEqual(importlib.metadata.version("faster-whisper"), "1.2.1")
