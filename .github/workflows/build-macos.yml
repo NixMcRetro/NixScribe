@@ -36,6 +36,9 @@ jobs:
       - name: Test formatting, models, cache handling and audio export
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
+      - name: Test prompt controls without inference
+        run: node --test tests/test_prompt_controls.js
+
       - name: Require supplied icon for stable releases
         if: startsWith(github.ref, 'refs/tags/v')
         run: test -s assets/NixScribe-master.png
@@ -103,6 +106,9 @@ jobs:
               grep -q 'data-repository="mlx-community/whisper-large-v3-turbo"' /tmp/nixscribe-index.html
               grep -q 'id="diarizationDevice"' /tmp/nixscribe-index.html
               grep -q 'id="mlxPrecision"' /tmp/nixscribe-index.html
+              grep -q 'id="promptCount"' /tmp/nixscribe-index.html
+              grep -q 'id="hotwordsHint"' /tmp/nixscribe-index.html
+              grep -q 'id="australianSpellingBtn"' /tmp/nixscribe-index.html
               grep -q 'class="brand-icon"' /tmp/nixscribe-index.html
               curl -fsS "http://127.0.0.1:8765/branding/icon.png" -o /tmp/nixscribe-icon.png
               file /tmp/nixscribe-icon.png | grep -q 'PNG image data'

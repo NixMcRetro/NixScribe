@@ -134,7 +134,10 @@
     .checkline label { margin: 0; color: var(--text); font-weight: 500; }
     .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 18px; }
     .actions .action-hint { flex: 1; margin: 0; }
-    .prompt-grid.single { grid-template-columns: 1fr; }
+    textarea:disabled { color: var(--muted); cursor: default; }
+    .prompt-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .prompt-tools .hint { margin: 0; }
+    .prompt-tools button { font-size: 12px; padding: 6px 9px; }
     .advanced {
       margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px;
     }
@@ -368,13 +371,20 @@
     </div>
 
     <div id="promptGrid" class="grid two prompt-grid" style="margin-top:14px">
-      <div id="hotwordsField">
-        <label for="hotwords">Names and uncommon terminology (CPU)</label>
-        <textarea id="hotwords" placeholder="Surname, product name, acronym, technical term"></textarea>
-      </div>
       <div>
-        <label for="initialPrompt">Context and names</label>
-        <textarea id="initialPrompt" placeholder="Example: A two-person technical interview about computer repair. English."></textarea>
+        <label for="initialPrompt">Initial prompt (context and names)</label>
+        <textarea id="initialPrompt" aria-describedby="promptCount promptHint" placeholder="Example: An Australian English technical interview about computer repair."></textarea>
+        <div class="prompt-tools">
+          <span id="promptCount" class="hint">0 words · 0 characters</span>
+          <button id="australianSpellingBtn" type="button">Add Australian English spelling hint</button>
+        </div>
+        <div id="promptHint" class="hint">Keep context concise and prioritise essential vocabulary. Word and character counts are not model token counts. Spelling hints guide recognition but do not guarantee spelling or rewrite the transcript.</div>
+      </div>
+      <div id="hotwordsField">
+        <label for="hotwords">Hotwords (names and uncommon terminology, CPU)</label>
+        <textarea id="hotwords" aria-describedby="hotwordsCount hotwordsHint" placeholder="Surname, product name, acronym, technical term"></textarea>
+        <div id="hotwordsCount" class="hint">0 words · 0 characters</div>
+        <div id="hotwordsHint" class="hint"></div>
       </div>
     </div>
 
@@ -528,12 +538,34 @@ function updateModelRepository() {
   $('batchLabel').textContent = isMLX ? 'CPU fallback batch size' : 'CPU batch size';
   $('batchHint').textContent = isMLX ? 'Only used if MLX falls back to CPU.' : 'Applies to CPU recognition.';
   $('hotwords').disabled = isMLX;
-  $('hotwordsField').classList.toggle('hidden', isMLX);
-  $('promptGrid').classList.toggle('single', isMLX);
+  $('hotwordsHint').textContent = isMLX
+    ? 'MLX does not support separate hotwords. Use the initial prompt for essential terms. Your hotwords remain here for CPU selection and are not sent on MLX jobs, even on fallback.'
+    : 'Separate vocabulary hint for CPU recognition. Keep only useful names and uncommon terms.';
   $('engineHint').textContent = option?.dataset.description || '';
 }
 $('model').addEventListener('change', updateModelRepository);
 updateModelRepository();
+
+function updatePromptCounts() {
+  for (const [field, counter] of [['initialPrompt', 'promptCount'], ['hotwords', 'hotwordsCount']]) {
+    const value = $(field).value.trim();
+    const words = value ? value.split(/\s+/u).length : 0;
+    $(counter).textContent = words + ' words · ' + Array.from(value).length + ' characters';
+  }
+}
+function addAustralianSpelling() {
+  const field = $('initialPrompt');
+  const hint = 'Use Australian English spelling.';
+  if (!field.value.includes(hint)) {
+    field.value = hint + (field.value.trim() ? '\n\n' + field.value : '');
+  }
+  updatePromptCounts();
+  field.focus();
+}
+$('initialPrompt').addEventListener('input', updatePromptCounts);
+$('hotwords').addEventListener('input', updatePromptCounts);
+$('australianSpellingBtn').addEventListener('click', addAustralianSpelling);
+updatePromptCounts();
 
 function updateDiarizationDevice() {
   const single = $('speakerCount').value === '1';

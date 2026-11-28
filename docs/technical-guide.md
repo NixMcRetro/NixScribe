@@ -109,7 +109,12 @@ cancellable worker process releases the GPU model before CPU forced alignment
 and speaker identification. TXT, SRT and MP3 outputs are unchanged.
 
 The CPU engine's compute type, batch size, and hotwords are not applicable to
-MLX. Context remains available. The MLX API does not provide the existing
+MLX. The initial prompt remains available, with live word/character counts (not
+token counts). Hotwords stay visible but disabled for MLX, and their text is
+retained while switching engines in the current window. Disabled hotwords are
+not sent, including on automatic CPU fallback. The Australian English spelling
+button inserts an editable, optional context hint; it does not enforce spelling
+or post-process recognised speech. No prompt text is saved by these controls. The MLX API does not provide the existing
 WhisperX progress callback, so during recognition the app reports the active
 stage without pretending to know its percentage. The transcript appears after
 that pass. A failed MLX download or inference automatically retries the matching CPU model (large-v3 or large-v3-turbo) in float32. Cancellation never starts a fallback. Both attempted and successful models are logged. The GPU and CPU
