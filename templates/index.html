@@ -321,7 +321,7 @@
         <div class="hint">Model repository on Hugging Face:</div>
         <div id="modelRepository" class="model-repository">{{ mlx_repositories.get(default_model) or model_repositories.get(default_model) }}</div>
         <div id="engineHint" class="hint"></div>
-        <div class="hint">Approximate quality-first order within each engine; accuracy varies by recording.</div>
+        <div class="hint">Default: Faster-Whisper large-v3 on CPU with speech detection. Accelerated models are optional.</div>
         </div>
         <div class="field-group">
           <label id="precisionLabel" for="computeType">Recognition precision</label>
@@ -649,7 +649,7 @@ function updateDiarizationDevice() {
   const experimental = $('diarizationDevice').querySelector('option[value="intelligent-auto-v5"]');
   if (experimental) {
     experimental.disabled = $('speakerCount').value !== 'auto';
-    if (experimental.disabled && experimental.selected && !single) $('diarizationDevice').value = 'mps';
+    if (experimental.disabled && experimental.selected && !single) $('diarizationDevice').value = 'cpu';
   }
   $('diarizationDevice').disabled = single;
   $('diarizationDevice').classList.toggle('hidden', single);
@@ -663,10 +663,10 @@ function updateDiarizationDevice() {
     : $('diarizationDevice').value === 'combined'
       ? 'Runs FluidAudio and Pyannote. Slower; not shown to improve accuracy consistently.'
       : $('diarizationDevice').value === 'mps'
-      ? 'Quality-first default. Pyannote on GPU; retries on CPU if needed.'
+      ? 'Optional Pyannote GPU acceleration; retries on CPU if needed.'
       : $('diarizationDevice').value === 'coreml'
         ? 'FluidAudio uses CPU, GPU and Neural Engine as available. Separate first-use model download. Retries on Apple GPU, then CPU if needed.'
-        : 'Pyannote on CPU. Independent of recognition precision.';
+        : 'Default: Pyannote on CPU. Independent of recognition precision.';
 }
 $('speakerCount').addEventListener('change', updateDiarizationDevice);
 $('diarizationDevice').addEventListener('change', updateDiarizationDevice);

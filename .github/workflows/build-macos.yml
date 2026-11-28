@@ -121,12 +121,13 @@ jobs:
               grep -q 'class="brand-icon"' /tmp/nixscribe-index.html
               curl -fsS "http://127.0.0.1:8765/branding/icon.png" -o /tmp/nixscribe-icon.png
               file /tmp/nixscribe-icon.png | grep -q 'PNG image data'
-              grep -q 'value="mps" selected' /tmp/nixscribe-index.html
+              grep -q 'value="cpu" selected' /tmp/nixscribe-index.html
               grep -q 'value="auto" selected' /tmp/nixscribe-index.html
+              grep -q 'value="float32" selected' /tmp/nixscribe-index.html
               grep -q 'id="exportLogBtn"' /tmp/nixscribe-index.html
               grep -q 'id="recognitionActual"' /tmp/nixscribe-index.html
               grep -q 'value="intelligent-auto-v5"' /tmp/nixscribe-index.html
-              grep -q 'value="mlx-large-v3".*selected' /tmp/nixscribe-index.html
+              grep -q 'value="large-v3".*selected' /tmp/nixscribe-index.html
               echo "Frozen NixScribe app launched and served its UI successfully."
               exit 0
             fi

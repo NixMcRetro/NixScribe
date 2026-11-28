@@ -20,8 +20,7 @@ DEVICES = frozenset(("cpu", "mps", "coreml", "combined", "intelligent-auto-v5"))
 
 
 def default_device() -> str:
-    from app_config import apple_silicon
-    return "mps" if apple_silicon() else "cpu"
+    return "cpu"
 
 
 def fallback_devices(requested: str) -> tuple[str, ...]:

@@ -2,13 +2,13 @@
 
 [← Back to NixScribe](../README.md)
 
-Detailed setup, model configuration, local storage, export behaviour and development notes for v0.3.1.
+Detailed setup, model configuration, local storage, export behaviour and development notes for v0.4.0.
 
 ## Features
 
-- MLX Whisper is preferred on Apple silicon, with eight selectable CPU Whisper models for compatibility and fallback. Model weights download on first use.
+- Faster-Whisper large-v3 on CPU is the default, with seven other CPU models and optional MLX Whisper on Apple silicon. Model weights download on first use.
 - English transcription with forced alignment for accurate timestamps.
-- Pyannote Community-1 GPU diarization by default; FluidAudio Core ML and Pyannote CPU alternatives.
+- Pyannote Community-1 CPU diarization by default; Pyannote GPU and FluidAudio Core ML alternatives.
 - Speaker selector: Auto or an exact 1-10 speakers.
 - Real WhisperX stage progress and percentages.
 - Live transcript view showing the most recently decoded timestamped text.
@@ -29,10 +29,11 @@ Example TXT output:
 
 ## Recommended quality settings
 
-For a recent Apple-silicon Mac with sufficient RAM, the default quality-first profile is:
+The conservative v0.4.0 baseline restores the historical CPU pipeline defaults for recognition and speaker identification. Exact historical recording settings are unknown; no accuracy improvement is claimed without audio validation.
 
-- Model: `large-v3 - MLX Community` (Apple GPU, FP16)
-- Speaker identification: Pyannote (GPU); choose FluidAudio (Core ML) for speed
+- Model: `large-v3 - Systran` (CPU, FP32)
+- Voice activity detection and alignment: standard WhisperX, CPU recognition
+- Speaker identification: Pyannote (CPU); GPU and Core ML are optional
 - Speaker count: Auto by default; choose the exact number when known
 - CPU fallback uses the corresponding Whisper model in float32
 
@@ -95,7 +96,7 @@ export HF_TOKEN='hf_...'
 ## Apple GPU recognition (MLX)
 
 The model menu now groups the original eight CPU options separately from two
-MLX Whisper options. MLX large-v3 is the default on Apple silicon.
+MLX Whisper options. MLX is optional on Apple silicon; CPU large-v3 is the default.
 
 | GPU model | Download repository |
 | --- | --- |

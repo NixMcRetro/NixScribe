@@ -15,9 +15,9 @@ Turn recordings into words, right on your Mac. NixScribe is a local English tran
 
 ## ✨ What's inside?
 
-- 🎙️ Transcribe audio and video with MLX Whisper.
+- 🎙️ Transcribe audio and video with Faster-Whisper large-v3 and WhisperX speech detection by default; MLX is optional.
 - 👥 Identify who's speaking with Pyannote or fast FluidAudio Core ML.
-- ⚡ Let Apple silicon do the heavy lifting, with automatic fallbacks.
+- ⚡ Choose optional Apple silicon acceleration, with automatic fallbacks.
 - 📝 Save readable transcripts, timed subtitles and optional MP3s.
 - 🔒 Keep your recordings private and originals untouched.
 - 📁 Give every transcription its own dated project folder.
@@ -36,7 +36,7 @@ For Pyannote speaker identification, accept the [Pyannote model terms](https://h
 
 On an M5 Mac, one 83.1-second test recording went from **78 seconds to 14 seconds** with cached models. That's approximately **5.6× faster**.
 
-MLX handles recognition on the GPU. Pyannote GPU is the quality-first speaker identification default; FluidAudio Core ML is available for speed, and Pyannote CPU remains a fallback.
+v0.4.0 restores the conservative CPU baseline: Faster-Whisper large-v3 (FP32), WhisperX speech detection and alignment, and Pyannote CPU speaker identification. MLX, Pyannote GPU and FluidAudio remain optional. The benchmark above describes optional acceleration, not the default or a proven accuracy gain.
 
 *One short-recording benchmark, not a guarantee. Speaker accuracy and longer recordings are still being evaluated.*
 
@@ -56,7 +56,7 @@ Readable words, timed subtitles and optional audio. No overwriting earlier proje
 
 - **v0.3.0** · Apple silicon acceleration
 - **[v0.3.1](https://github.com/NixMcRetro/NixScribe/releases/tag/v0.3.1)** · Diarization validation, backend selection and interface polish
-- **v0.4.0** · Single-source reliability and application delivery (release candidate)
+- **v0.4.0** · Back-to-basics CPU defaults, single-source reliability and application delivery (development candidate)
 - **Future research** · Speaker-count estimation, short-duration speaker recovery, independent-device multi-source transcription and local AI-assisted reconciliation
 
 ## 🛠️ Curious how it works?
