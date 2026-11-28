@@ -28,10 +28,10 @@ class DiarizationBackendTests(unittest.TestCase):
     def test_no_speech_is_valid_transport(self):
         self.assertEqual(validate_intervals([]), [])
 
-    def test_default_device_prefers_apple_silicon(self):
+    def test_conservative_defaults_on_apple_silicon_and_linux(self):
         with patch("diarization_backend.sys.platform", "darwin"), patch("platform.machine", return_value="arm64"):
-            self.assertEqual(default_device(), "mps")
-            self.assertEqual(preferred_model(), "mlx-large-v3")
+            self.assertEqual(default_device(), "cpu")
+            self.assertEqual(preferred_model(), "large-v3")
         with patch("diarization_backend.sys.platform", "linux"):
             self.assertEqual(default_device(), "cpu")
             self.assertEqual(preferred_model(), "large-v3")

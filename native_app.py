@@ -49,13 +49,17 @@ def run_native(app: Any, host: str, port: int, is_running: Callable[[], bool],
     quit_event = threading.Event()
     closed_event = threading.Event()
     try:
-        server = make_server(host, port, app, threaded=True)
+        # Bind directly to an OS-assigned port unless the caller explicitly requests one.
+        server = make_server(host, port if "WHISPERX_UI_PORT" in os.environ else 0,
+                             app, threaded=True)
+        url = f"http://{host}:{server.server_port}/"
+        print(f"NixScribe: {url}", flush=True)
         worker = threading.Thread(target=server.serve_forever,
                                   name="NixScribe-local-web", daemon=True)
         worker.start()
         register_quit(quit_event.set)
         window = webview.create_window(
-            "NixScribe", f"http://{host}:{port}/",
+            "NixScribe", url,
             width=1100, height=900, min_size=(760, 620),
             resizable=True, text_select=True, background_color="#F3F4F7",
         )

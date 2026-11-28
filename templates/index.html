@@ -134,7 +134,10 @@
     .checkline label { margin: 0; color: var(--text); font-weight: 500; }
     .actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 18px; }
     .actions .action-hint { flex: 1; margin: 0; }
-    .prompt-grid.single { grid-template-columns: 1fr; }
+    textarea:disabled { color: var(--muted); cursor: default; }
+    .prompt-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .prompt-tools .hint { margin: 0; }
+    .prompt-tools button { font-size: 12px; padding: 6px 9px; }
     .advanced {
       margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px;
     }
@@ -309,7 +312,7 @@
           {% endfor %}
           </optgroup>
           {% endif %}
-          <optgroup label="Faster-Whisper – CPU">
+          <optgroup label="WhisperX (CPU)">
           {% for model_id, model_label in models %}
           <option value="{{ model_id }}" data-engine="cpu" data-repository="{{ model_repositories[model_id] }}" data-description="{{ model_descriptions[model_id] }}" {% if model_id == default_model %}selected{% endif %}>{{ model_label }}</option>
           {% endfor %}
@@ -318,12 +321,12 @@
         <div class="hint">Model repository on Hugging Face:</div>
         <div id="modelRepository" class="model-repository">{{ mlx_repositories.get(default_model) or model_repositories.get(default_model) }}</div>
         <div id="engineHint" class="hint"></div>
-        <div class="hint">Approximate quality-first order within each engine; accuracy varies by recording.</div>
+        <div class="hint">Default: WhisperX large-v3 (quality-first, full model) on CPU, using Faster-Whisper and speech detection. Accelerated models are optional.</div>
         </div>
         <div class="field-group">
           <label id="precisionLabel" for="computeType">Recognition precision</label>
           <select id="computeType">
-            <option value="float32" selected>FP32 (float32) - full precision</option>
+            <option value="float32" selected>FP32 (float32) - maximum fidelity (full precision)</option>
             <option value="int8">INT8 - reduced memory</option>
           </select>
           <input id="mlxPrecision" class="hidden" type="text" value="FP16 (float16)" readonly>
@@ -368,16 +371,38 @@
     </div>
 
     <div id="promptGrid" class="grid two prompt-grid" style="margin-top:14px">
-      <div id="hotwordsField">
-        <label for="hotwords">Names and uncommon terminology (CPU)</label>
-        <textarea id="hotwords" placeholder="Surname, product name, acronym, technical term"></textarea>
-      </div>
       <div>
-        <label for="initialPrompt">Context and names</label>
-        <textarea id="initialPrompt" placeholder="Example: A two-person technical interview about computer repair. English."></textarea>
+        <label for="initialPrompt">Initial prompt (context and names)</label>
+        <textarea id="initialPrompt" aria-describedby="promptCount promptHint" placeholder="Example: An Australian English technical interview about computer repair."></textarea>
+        <div class="prompt-tools">
+          <span id="promptCount" class="hint">0 words · 0 characters</span>
+        </div>
+        <div id="promptHint" class="hint">Keep context concise and prioritise essential vocabulary. Token counts use the selected engine’s local tokenizer; counts are unavailable until its tokenizer is cached. Use brief descriptive context (for example, Australian English technical interview), not instructions to the recogniser. Recognition can echo prompt text as speech. Context does not guarantee spelling; review unexpected repetition.</div>
+      </div>
+      <div id="hotwordsField">
+        <label for="hotwords">Custom vocabulary / hotwords</label>
+        <textarea id="hotwords" aria-describedby="hotwordsCount hotwordsHint" placeholder="Surname, product name, acronym, technical term"></textarea>
+        <div id="hotwordsCount" class="hint">0 words · 0 characters</div>
+        <div id="hotwordsHint" class="hint"></div>
       </div>
     </div>
-
+    <div class="prompt-tools">
+      <button id="saveVocabularyBtn" type="button">Save vocabulary profile…</button>
+      <button id="loadVocabularyBtn" type="button">Load vocabulary profile…</button>
+      <span id="vocabularyStatus" class="hint" role="status"></span>
+    </div>
+    <div class="hint">Profiles are explicit, local plaintext JSON files containing both fields. Loading replaces the current fields. Nothing is saved automatically.</div>
+    <details class="advanced" open>
+      <summary>Effective recognition prompt (local preview)</summary>
+      <div id="promptBudget" class="hint" role="status" aria-live="polite">Checking local tokenizer…</div>
+      <label for="effectivePrompt" style="margin-top:8px">Initial prompt sent to engine</label>
+      <textarea id="effectivePrompt" readonly></textarea>
+      <div id="effectiveHotwordsField">
+        <label for="effectiveHotwords" style="margin-top:8px">Separate hotwords sent to CPU</label>
+        <textarea id="effectiveHotwords" readonly></textarea>
+      </div>
+      <div class="hint">No text is silently truncated. Over-budget prompts must be shortened before recognition.</div>
+    </details>
     <details class="advanced">
       <summary>Advanced settings</summary>
       <div class="checkline">
@@ -504,6 +529,8 @@ let startingJob = false;
 let lastJobStatus = 'Idle';
 let jobRunning = false;
 let exportingLog = false;
+let promptTimer;
+let promptRevision = 0;
 let hfReady = {{ hf_token_set|tojson }};
 
 function updateStartState() {
@@ -527,20 +554,91 @@ function updateModelRepository() {
     : 'FP32 or INT8 affects recognition only, not speaker identification.';
   $('batchLabel').textContent = isMLX ? 'CPU fallback batch size' : 'CPU batch size';
   $('batchHint').textContent = isMLX ? 'Only used if MLX falls back to CPU.' : 'Applies to CPU recognition.';
-  $('hotwords').disabled = isMLX;
-  $('hotwordsField').classList.toggle('hidden', isMLX);
-  $('promptGrid').classList.toggle('single', isMLX);
+  $('hotwordsHint').textContent = isMLX
+    ? 'Vocabulary is appended to the MLX initial prompt. It may not persist beyond the first decoded window. CPU fallback uses separate fields.'
+    : 'Separate vocabulary hint for CPU recognition. Keep only useful names and uncommon terms.';
+  $('effectiveHotwordsField').classList.toggle('hidden', isMLX);
   $('engineHint').textContent = option?.dataset.description || '';
 }
-$('model').addEventListener('change', updateModelRepository);
+$('model').addEventListener('change', () => { updateModelRepository(); updatePromptCounts(); });
 updateModelRepository();
+
+function updatePromptCounts() {
+  for (const [field, counter] of [['initialPrompt', 'promptCount'], ['hotwords', 'hotwordsCount']]) {
+    const value = $(field).value.trim();
+    const words = value ? value.split(/\s+/u).length : 0;
+    $(counter).textContent = words + ' words · ' + Array.from(value).length + ' characters';
+  }
+  clearTimeout(promptTimer);
+  const revision = ++promptRevision;
+  $('promptBudget').textContent = 'Checking local tokenizer…';
+  $('effectivePrompt').value = '';
+  $('effectiveHotwords').value = '';
+  promptTimer = setTimeout(() => refreshPromptPreview(revision), 250);
+}
+async function refreshPromptPreview(revision) {
+  try {
+    const plan = await jsonFetch('/api/prompt-preview', {
+      method:'POST', headers:{'Content-Type':'application/json', 'X-NixScribe-Action':'prompt-preview'},
+      body:JSON.stringify({model:$('model').value, initial_prompt:$('initialPrompt').value, hotwords:$('hotwords').value})
+    });
+    if (revision !== promptRevision) return;
+    $('effectivePrompt').value = plan.initial_prompt;
+    $('effectiveHotwords').value = plan.hotwords;
+    if (!plan.available) {
+      $('promptBudget').textContent = 'Token count unavailable until the CPU tokenizer is cached. Checked before recognition.';
+      return;
+    }
+    $('promptCount').textContent = plan.initial_tokens + ' tokens (context alone)';
+    $('hotwordsCount').textContent = plan.vocabulary_tokens + ' tokens (vocabulary alone)';
+    $('promptBudget').textContent = plan.effective_tokens + ' / ' + plan.limit +
+      ' tokens (' + (plan.engine === 'mlx' ? 'combined MLX prompt' : 'conservative CPU total budget') + ')' +
+      (plan.over_limit ? ' — Too long. Shorten before starting; no text will be discarded.' : '');
+  } catch (e) {
+    if (revision === promptRevision) $('promptBudget').textContent = e.message || 'Local tokenizer unavailable.';
+  }
+}
+$('initialPrompt').addEventListener('input', updatePromptCounts);
+$('hotwords').addEventListener('input', updatePromptCounts);
+updatePromptCounts();
+
+async function vocabularyProfile(action) {
+  if (action === 'load' && ($('initialPrompt').value || $('hotwords').value) &&
+      !window.confirm('Replace the current initial prompt and vocabulary with a saved profile?')) return;
+  $('saveVocabularyBtn').disabled = $('loadVocabularyBtn').disabled = true;
+  $('vocabularyStatus').textContent = '';
+  try {
+    const payload = {action};
+    if (action === 'save') {
+      payload.initial_prompt = $('initialPrompt').value;
+      payload.hotwords = $('hotwords').value;
+    }
+    const data = await jsonFetch('/api/prompt-profile', {
+      method:'POST', headers:{'Content-Type':'application/json', 'X-NixScribe-Action':'prompt-profile'},
+      body:JSON.stringify(payload)
+    });
+    if (data.cancelled) return;
+    if (action === 'load') {
+      $('initialPrompt').value = data.initial_prompt;
+      $('hotwords').value = data.hotwords;
+      updatePromptCounts();
+    }
+    $('vocabularyStatus').textContent = action === 'save' ? 'Saved: ' + data.name : 'Profile loaded.';
+  } catch (e) {
+    $('vocabularyStatus').textContent = e.message;
+  } finally {
+    $('saveVocabularyBtn').disabled = $('loadVocabularyBtn').disabled = false;
+  }
+}
+$('saveVocabularyBtn').addEventListener('click', () => vocabularyProfile('save'));
+$('loadVocabularyBtn').addEventListener('click', () => vocabularyProfile('load'));
 
 function updateDiarizationDevice() {
   const single = $('speakerCount').value === '1';
   const experimental = $('diarizationDevice').querySelector('option[value="intelligent-auto-v5"]');
   if (experimental) {
     experimental.disabled = $('speakerCount').value !== 'auto';
-    if (experimental.disabled && experimental.selected && !single) $('diarizationDevice').value = 'mps';
+    if (experimental.disabled && experimental.selected && !single) $('diarizationDevice').value = 'cpu';
   }
   $('diarizationDevice').disabled = single;
   $('diarizationDevice').classList.toggle('hidden', single);
@@ -554,10 +652,10 @@ function updateDiarizationDevice() {
     : $('diarizationDevice').value === 'combined'
       ? 'Runs FluidAudio and Pyannote. Slower; not shown to improve accuracy consistently.'
       : $('diarizationDevice').value === 'mps'
-      ? 'Quality-first default. Pyannote on GPU; retries on CPU if needed.'
+      ? 'Optional Pyannote GPU acceleration; retries on CPU if needed.'
       : $('diarizationDevice').value === 'coreml'
         ? 'FluidAudio uses CPU, GPU and Neural Engine as available. Separate first-use model download. Retries on Apple GPU, then CPU if needed.'
-        : 'Pyannote on CPU. Independent of recognition precision.';
+        : 'Default: Pyannote on CPU. Independent of recognition precision.';
 }
 $('speakerCount').addEventListener('change', updateDiarizationDevice);
 $('diarizationDevice').addEventListener('change', updateDiarizationDevice);
@@ -872,7 +970,7 @@ $('startBtn').addEventListener('click', async () => {
     srt_max_lines: Number($('srtLines').value),
     srt_max_duration: Number($('srtDuration').value),
     initial_prompt: $('initialPrompt').value.trim(),
-    hotwords: $('hotwords').disabled ? '' : $('hotwords').value.trim(),
+    hotwords: $('hotwords').value.trim(),
   };
   try {
     await jsonFetch('/api/start', {

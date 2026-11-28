@@ -1,5 +1,5 @@
 """Shared version and supported CPU Whisper models."""
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 # Repository IDs match the aliases in Faster-Whisper 1.2.1.
 # Publisher means the Hugging Face repository owner, not the model developer.
 MODEL_REPOSITORIES = {
@@ -38,9 +38,9 @@ ALL_MODEL_IDS = MODEL_IDS | frozenset(MLX_REPOSITORIES)
 
 # Approximate quality-first ordering, not a measured ranking.
 MODEL_DESCRIPTIONS = {
-    "mlx-large-v3": "Quality-first full model; recommended for accuracy.",
+    "mlx-large-v3": "Full MLX model; optional accelerated recognition.",
     "mlx-large-v3-turbo": "Faster decoding with a smaller decoder.",
-    "large-v3": "Quality-first full CPU model; higher memory demand.",
+    "large-v3": "Conservative default; full CPU model with speech detection.",
     "large-v3-turbo": "Faster full-size encoder with a smaller decoder.",
     "distil-large-v3.5": "Distilled English model for faster CPU recognition.",
     "distil-large-v3": "Earlier distilled English model for faster CPU recognition.",
@@ -50,7 +50,7 @@ MODEL_DESCRIPTIONS = {
     "tiny.en": "Smallest English model; prioritises speed over accuracy.",
 }
 
-# Apple silicon is preferred; CPU remains a selectable compatibility path.
+# Optional MLX recognition retains a corresponding CPU fallback.
 MLX_CPU_FALLBACK = {
     "mlx-large-v3": "large-v3",
     "mlx-large-v3-turbo": "large-v3-turbo",
@@ -64,4 +64,4 @@ def apple_silicon() -> bool:
 
 
 def preferred_model() -> str:
-    return "mlx-large-v3" if apple_silicon() else DEFAULT_MODEL
+    return DEFAULT_MODEL

@@ -2,13 +2,13 @@
 
 [← Back to NixScribe](../README.md)
 
-Detailed setup, model configuration, local storage, export behaviour and development notes for v0.3.1.
+Detailed setup, model configuration, local storage, export behaviour and development notes for v0.4.0.
 
 ## Features
 
-- MLX Whisper is preferred on Apple silicon, with eight selectable CPU Whisper models for compatibility and fallback. Model weights download on first use.
+- Faster-Whisper large-v3 on CPU is the default, with seven other CPU models and optional MLX Whisper on Apple silicon. Model weights download on first use.
 - English transcription with forced alignment for accurate timestamps.
-- Pyannote Community-1 GPU diarization by default; FluidAudio Core ML and Pyannote CPU alternatives.
+- Pyannote Community-1 CPU diarization by default; Pyannote GPU and FluidAudio Core ML alternatives.
 - Speaker selector: Auto or an exact 1-10 speakers.
 - Real WhisperX stage progress and percentages.
 - Live transcript view showing the most recently decoded timestamped text.
@@ -29,10 +29,11 @@ Example TXT output:
 
 ## Recommended quality settings
 
-For a recent Apple-silicon Mac with sufficient RAM, the default quality-first profile is:
+The conservative v0.4.0 baseline restores the historical CPU pipeline defaults for recognition and speaker identification. Exact historical recording settings are unknown; no accuracy improvement is claimed without audio validation.
 
-- Model: `large-v3 - MLX Community` (Apple GPU, FP16)
-- Speaker identification: Pyannote (GPU); choose FluidAudio (Core ML) for speed
+- Model: `large-v3 - Systran` (CPU, FP32)
+- Voice activity detection and alignment: standard WhisperX, CPU recognition
+- Speaker identification: Pyannote (CPU); GPU and Core ML are optional
 - Speaker count: Auto by default; choose the exact number when known
 - CPU fallback uses the corresponding Whisper model in float32
 
@@ -72,7 +73,7 @@ dist/NixScribe.app
 dist/NixScribe-macOS-arm64.zip
 ```
 
-Drag `NixScribe.app` to `/Applications` and launch it from Finder or Spotlight.
+Drag `NixScribe.app` to `/Applications` and launch it from Finder or Spotlight. The native window binds to an available loopback port automatically; it does not stop other processes or reuse their servers. Browser mode (`--browser`) retains port 8765 by default. An explicit `WHISPERX_UI_PORT` environment setting overrides the automatic native port selection.
 
 The build script applies an ad-hoc signature suitable for a locally built personal application. Developer ID signing and notarisation are separate distribution steps. macOS may block downloaded, unnotarised builds; only approve an app you have verified and trust. See Apple's [guidance on opening apps safely](https://support.apple.com/en-au/102445), or build from source.
 
@@ -95,7 +96,7 @@ export HF_TOKEN='hf_...'
 ## Apple GPU recognition (MLX)
 
 The model menu now groups the original eight CPU options separately from two
-MLX Whisper options. MLX large-v3 is the default on Apple silicon.
+MLX Whisper options. MLX is optional on Apple silicon; CPU large-v3 is the default.
 
 | GPU model | Download repository |
 | --- | --- |
@@ -109,7 +110,47 @@ cancellable worker process releases the GPU model before CPU forced alignment
 and speaker identification. TXT, SRT and MP3 outputs are unchanged.
 
 The CPU engine's compute type, batch size, and hotwords are not applicable to
-MLX. Context remains available. The MLX API does not provide the existing
+MLX as a separate argument. Both editable fields remain visible. On MLX the
+initial prompt and vocabulary are joined with two newlines; CPU receives the
+original fields separately, including on automatic CPU fallback. The preview
+uses the same local preparation function as recognition. MLX uses its bundled
+tokenizer (100-language multilingual vocabulary for both large-v3 variants);
+CPU uses the selected cached tokenizer.json without loading model weights.
+Preview never downloads a tokenizer. If the CPU tokenizer is absent, token
+counts are unavailable until cached, and validation repeats before recognition.
+
+Both supported MLX models have a 448-token decoder context; the decoder retains
+the last 223 prompt tokens. Faster-Whisper separately caps hotwords at the
+first 223 tokens and prior prompt tokens at the last 223. NixScribe limits the
+combined CPU input to 223 tokens as a conservative budget to preserve decoder
+space; this is an app policy, not the CPU engine's separate per-field limits.
+Over-budget prompts are rejected, not truncated. Counts include the leading
+space added by the pinned recognisers. MLX combined token counts are measured
+on the joined string, not inferred by adding two independent counts. The
+pinned MLX source contract is tested in CI: the initial prompt is seeded before
+decoding and reset after a decoded window when condition_on_previous_text is
+False (or high temperature). No change to this default or guaranteed prompt
+persistence is claimed. In the pinned MLX decoder, later decoded windows
+can lose the fixed user prompt when previous-text conditioning is disabled.
+This differs from WhisperX's batched CPU path: its model constructs a fresh
+prompt from the original user context and hotwords for each batch, without
+carrying generated text from earlier batches. The installed-source contract
+checks the pipeline dispatch and model implementation separately. Do not
+enable previous-text conditioning globally as a substitute for fixed prompt
+persistence. Use brief descriptive context rather than instruction-style
+spelling prompts. The spelling-instruction insertion button was removed;
+existing editable prompts and saved profiles are not rewritten. Recognition
+can echo prompt text as speech, even with
+previous-text conditioning disabled. Keep hints brief, review unexpected
+repetition and omit optional hints when testing suspected prompt leakage.
+No automatic deletion of matching transcript text is performed.
+Activity logs and recognition metadata include engine,
+counts and budget, not prompt text or token IDs; fields are not
+persisted automatically. Save and load vocabulary profiles using native file
+choosers. Profiles contain both original fields as plaintext JSON, saved
+with owner-only permissions and no overwrite. They can contain sensitive
+terms; choose a private local folder. Loading validates the schema and size
+before replacing the fields, and asks for confirmation if either is populated. The MLX API does not provide the existing
 WhisperX progress callback, so during recognition the app reports the active
 stage without pretending to know its percentage. The transcript appears after
 that pass. A failed MLX download or inference automatically retries the matching CPU model (large-v3 or large-v3-turbo) in float32. Cancellation never starts a fallback. Both attempted and successful models are logged. The GPU and CPU
@@ -247,7 +288,8 @@ The build includes FluidAudio's Apache-2.0 license.
 ## Activity log
 
 The Activity log is always expanded. Click **Copy Activity Log** to copy the
-full current job to the macOS clipboard, or **Export Log** to choose a folder
+full current job to the macOS clipboard using an explicit UTF-8 locale (including
+Unicode filenames), or **Export Log** to choose a folder
 and save a uniquely named private UTF-8 text snapshot. The log does not drop
 older entries. It remains available after completion, cancellation or failure
 until the next job starts or the app quits. The viewport follows new entries
@@ -327,7 +369,7 @@ TXT now contains speaker-labelled paragraphs without timestamps, e.g.
 `[SPEAKER_00] Hello.`. Consecutive segments from the same speaker are combined
 by default; turn off that option if you want a paragraph for each segment.
 
-SRT keeps timestamps. It normally includes speaker labels, a maximum of two
+SRT keeps timestamps. Speaker labels are optional and off by default, with a maximum of two
 lines, 42 characters per line, and six seconds per cue. The export controls let
 you toggle SRT speaker labels and change width, line count and cue duration.
 Both exports and the final preview split recognition segments at actual
