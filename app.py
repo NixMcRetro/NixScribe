@@ -31,6 +31,8 @@ from app_config import (DEFAULT_MODEL, MODEL_IDS, MODELS, MODEL_REPOSITORIES, VE
                         MLX_CPU_FALLBACK, preferred_model, apple_silicon)
 from mlx_backend import transcribe_mlx
 from model_cache import prepare_model, repository_for
+from prompt_handling import (PromptError, prepare_prompt, require_prompt,
+                             prompt_fields, prompt_metadata)
 from audio_export import export_mp3, mp3_destination
 from activity_log import export_activity_log
 from app_config import MODEL_DESCRIPTIONS
@@ -672,11 +674,20 @@ def _run_job(config: dict[str, Any]) -> None:
             _cancel_if_requested()
             return path
 
+        def prompt_for_attempt():
+            plan = require_prompt(prepare_prompt(
+                model_id, config["initial_prompt"], config["hotwords"],
+                snapshot=model_path))
+            _append_log("Recognition prompt: " + json.dumps(prompt_metadata(plan), sort_keys=True)
+                        + "; condition_on_previous_text=False")
+            return plan
+
         is_mlx = model_id in MLX_REPOSITORIES
         if is_mlx:
             attempt_started = time.monotonic()
             try:
                 model_path = prepare_selected_model()
+                prompt_plan = prompt_for_attempt()
                 asr_started = time.monotonic()
                 _update(stage="GPU recognition", detail="Loading the cached MLX model and transcribing on Apple GPU…",
                         stage_percent=0.0, overall_percent=8.0,
@@ -684,10 +695,10 @@ def _run_job(config: dict[str, Any]) -> None:
                 _append_log(f"MLX Apple GPU model: {MLX_REPOSITORIES[model_id]} (configured FP16)")
                 result = transcribe_mlx(
                     working_input, model_id, model_path, len(audio) / 16000.0,
-                    config.get("initial_prompt", ""), _cancel_if_requested,
+                    prompt_plan["initial_prompt"], _cancel_if_requested,
                 )
                 _update(stage_percent=100.0, overall_percent=66.0)
-            except JobCancelled:
+            except (JobCancelled, PromptError):
                 raise
             except Exception as exc:
                 _cancel_if_requested()
@@ -701,6 +712,7 @@ def _run_job(config: dict[str, Any]) -> None:
 
         if not is_mlx:
             model_path = prepare_selected_model()
+            prompt_plan = prompt_for_attempt()
             asr_started = time.monotonic()
             compute_type = "float32" if requested_model in MLX_REPOSITORIES else config["compute_type"]
             asr_options = {
@@ -713,8 +725,8 @@ def _run_job(config: dict[str, Any]) -> None:
                 "log_prob_threshold": -1.0,
                 "no_speech_threshold": 0.6,
                 "condition_on_previous_text": False,
-                "initial_prompt": config.get("initial_prompt") or None,
-                "hotwords": config.get("hotwords") or None,
+                "initial_prompt": prompt_plan["initial_prompt"] or None,
+                "hotwords": prompt_plan["hotwords"] or None,
                 "suppress_tokens": [-1],
                 "suppress_numerals": False,
             }
@@ -773,7 +785,8 @@ def _run_job(config: dict[str, Any]) -> None:
                        "engine": "mlx" if is_mlx else "faster-whisper",
                        "device": "apple-gpu" if is_mlx else "cpu",
                        "configured_precision": "float16" if is_mlx else compute_type,
-                       "fallback": model_id != requested_model}
+                       "fallback": model_id != requested_model,
+                       "prompt": prompt_metadata(prompt_plan)}
         _update(recognition=recognition)
         _append_log(f"Recognition completed: model={model_id}, requested={requested_model}, "
                     f"engine={recognition['engine']}, device={recognition['device']}, "
@@ -1376,6 +1389,24 @@ def browse_projects():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@app.post("/api/prompt-preview")
+def prompt_preview():
+    if not request.is_json or request.headers.get("X-NixScribe-Action") != "prompt-preview":
+        return jsonify({"error": "Invalid prompt preview request."}), 400
+    origin = request.headers.get("Origin")
+    if origin and origin != request.host_url.rstrip("/"):
+        return jsonify({"error": "Invalid prompt preview origin."}), 403
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid prompt preview payload."}), 400
+    try:
+        initial, vocabulary = prompt_fields(payload)
+        plan = prepare_prompt(str(payload.get("model", preferred_model())), initial, vocabulary)
+        return jsonify(plan)
+    except PromptError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
 @app.post("/api/start")
 def start_job():
     payload = request.get_json(force=True, silent=False) or {}
@@ -1411,6 +1442,11 @@ def start_job():
     ):
         return jsonify({"ok": False, "error": "Unsupported subtitle formatting options."}), 400
 
+    try:
+        initial_prompt, hotwords = prompt_fields(payload)
+    except PromptError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
     config = {
         "input_file": input_file,
         "projects_dir": projects_dir,
@@ -1429,8 +1465,8 @@ def start_job():
         "srt_chars_per_line": srt_width,
         "srt_max_lines": srt_lines,
         "srt_max_duration": srt_duration,
-        "initial_prompt": str(payload.get("initial_prompt", "")).strip(),
-        "hotwords": str(payload.get("hotwords", "")).strip(),
+        "initial_prompt": initial_prompt,
+        "hotwords": hotwords,
     }
 
     if config["diarization_device"] not in DIARIZATION_DEVICES:
@@ -1444,10 +1480,16 @@ def start_job():
     if config["model"] in MLX_REPOSITORIES:
         if not apple_silicon():
             return jsonify({"ok": False, "error": "MLX requires an Apple silicon Mac."}), 400
-        if config["hotwords"]:
-            return jsonify({"ok": False, "error": "MLX does not support the CPU hotwords setting. Use Context instead."}), 400
     if config["compute_type"] not in {"float32", "int8"}:
         return jsonify({"ok": False, "error": "Unsupported compute type."}), 400
+
+    try:
+        plan = prepare_prompt(config["model"], initial_prompt, hotwords)
+        if plan["available"]:
+            require_prompt(plan)
+        # An uncached CPU tokenizer is checked again after normal model preparation.
+    except PromptError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     with state_lock:
         if STATE.get("running"):
@@ -1475,7 +1517,7 @@ def start_job():
             diarization_actual=None,
             error=None,
             detected_speakers=[],
-            settings=config,
+            settings={k: v for k, v in config.items() if k not in ("initial_prompt", "hotwords")},
         )
         try:
             threading.Thread(target=_run_job, args=(config,), daemon=True).start()

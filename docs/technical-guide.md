@@ -109,12 +109,31 @@ cancellable worker process releases the GPU model before CPU forced alignment
 and speaker identification. TXT, SRT and MP3 outputs are unchanged.
 
 The CPU engine's compute type, batch size, and hotwords are not applicable to
-MLX. The initial prompt remains available, with live word/character counts (not
-token counts). Hotwords stay visible but disabled for MLX, and their text is
-retained while switching engines in the current window. Disabled hotwords are
-not sent, including on automatic CPU fallback. The Australian English spelling
-button inserts an editable, optional context hint; it does not enforce spelling
-or post-process recognised speech. No prompt text is saved by these controls. The MLX API does not provide the existing
+MLX as a separate argument. Both editable fields remain visible. On MLX the
+initial prompt and vocabulary are joined with two newlines; CPU receives the
+original fields separately, including on automatic CPU fallback. The preview
+uses the same local preparation function as recognition. MLX uses its bundled
+tokenizer (100-language multilingual vocabulary for both large-v3 variants);
+CPU uses the selected cached tokenizer.json without loading model weights.
+Preview never downloads a tokenizer. If the CPU tokenizer is absent, token
+counts are unavailable until cached, and validation repeats before recognition.
+
+Both supported MLX models have a 448-token decoder context; the decoder retains
+the last 223 prompt tokens. Faster-Whisper separately caps hotwords at the
+first 223 tokens and prior prompt tokens at the last 223. NixScribe limits the
+combined CPU input to 223 tokens as a conservative budget to preserve decoder
+space; this is an app policy, not the CPU engine's separate per-field limits.
+Over-budget prompts are rejected, not truncated. Counts include the leading
+space added by the pinned recognisers. MLX combined token counts are measured
+on the joined string, not inferred by adding two independent counts. The
+pinned MLX source contract is tested in CI: the initial prompt is seeded before
+decoding and reset after a decoded window when condition_on_previous_text is
+False (or high temperature). No change to this default or guaranteed prompt
+persistence is claimed. WhisperX's batched CPU path constructs its prompt for
+each batch. The Australian English button remains an editable hint, not a
+spelling rewrite. Activity logs and recognition metadata include engine,
+counts and budget, not prompt text or token IDs; fields are not
+persisted automatically. The MLX API does not provide the existing
 WhisperX progress callback, so during recognition the app reports the active
 stage without pretending to know its percentage. The transcript appears after
 that pass. A failed MLX download or inference automatically retries the matching CPU model (large-v3 or large-v3-turbo) in float32. Cancellation never starts a fallback. Both attempted and successful models are logged. The GPU and CPU

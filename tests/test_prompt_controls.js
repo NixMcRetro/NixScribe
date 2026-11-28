@@ -15,24 +15,24 @@ function setup() {
   const source = html.slice(start, end).replace(/^[^\n]*\.addEventListener\([^\n]*\);\s*$/gm, '')
     .replace(/^updateModelRepository\(\);$/m, '')
     .replace(/^updatePromptCounts\(\);$/m, '');
-  const ctx = vm.createContext({$});
+  const ctx = vm.createContext({$, promptRevision:0, promptTimer:null, clearTimeout() {}, setTimeout() {}});
   vm.runInContext(source, ctx);
   return {$, ctx};
 }
-test('MLX disables hotwords without losing text; CPU restores both inputs', () => {
+test('MLX and CPU preserve both editable inputs', () => {
   const {$, ctx} = setup();
   $('hotwords').value = 'unusual terminology';
   $('initialPrompt').value = 'Technical interview';
   $('model').selectedOptions = [{dataset: {engine:'mlx'}}];
   ctx.updateModelRepository();
-  assert.equal($('hotwords').disabled, true);
-  assert.match($('hotwordsHint').textContent, /not sent/);
+  assert.equal($('hotwords').disabled, false);
+  assert.match($('hotwordsHint').textContent, /appended/);
   $('model').selectedOptions = [{dataset: {engine:'cpu'}}];
   ctx.updateModelRepository();
   assert.equal($('hotwords').disabled, false);
   assert.equal($('hotwords').value, 'unusual terminology');
   assert.equal($('initialPrompt').value, 'Technical interview');
-  assert.match(html, /hotwords: \$\('hotwords'\)\.disabled \? '' :/);
+  assert.match(html, /hotwords: \$\('hotwords'\)\.value\.trim\(\)/);
 });
 test('counts and optional Australian spelling hint preserve original context', () => {
   const {$, ctx} = setup();

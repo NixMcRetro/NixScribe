@@ -378,16 +378,26 @@
           <span id="promptCount" class="hint">0 words · 0 characters</span>
           <button id="australianSpellingBtn" type="button">Add Australian English spelling hint</button>
         </div>
-        <div id="promptHint" class="hint">Keep context concise and prioritise essential vocabulary. Word and character counts are not model token counts. Spelling hints guide recognition but do not guarantee spelling or rewrite the transcript.</div>
+        <div id="promptHint" class="hint">Keep context concise and prioritise essential vocabulary. Token counts use the selected engine’s local tokenizer; counts are unavailable until its tokenizer is cached. Spelling hints guide recognition but do not guarantee spelling or rewrite the transcript.</div>
       </div>
       <div id="hotwordsField">
-        <label for="hotwords">Hotwords (names and uncommon terminology, CPU)</label>
+        <label for="hotwords">Custom vocabulary / hotwords</label>
         <textarea id="hotwords" aria-describedby="hotwordsCount hotwordsHint" placeholder="Surname, product name, acronym, technical term"></textarea>
         <div id="hotwordsCount" class="hint">0 words · 0 characters</div>
         <div id="hotwordsHint" class="hint"></div>
       </div>
     </div>
-
+    <details class="advanced" open>
+      <summary>Effective recognition prompt (local preview)</summary>
+      <div id="promptBudget" class="hint" role="status" aria-live="polite">Checking local tokenizer…</div>
+      <label for="effectivePrompt" style="margin-top:8px">Initial prompt sent to engine</label>
+      <textarea id="effectivePrompt" readonly></textarea>
+      <div id="effectiveHotwordsField">
+        <label for="effectiveHotwords" style="margin-top:8px">Separate hotwords sent to CPU</label>
+        <textarea id="effectiveHotwords" readonly></textarea>
+      </div>
+      <div class="hint">No text is silently truncated. Over-budget prompts must be shortened before recognition.</div>
+    </details>
     <details class="advanced">
       <summary>Advanced settings</summary>
       <div class="checkline">
@@ -514,6 +524,8 @@ let startingJob = false;
 let lastJobStatus = 'Idle';
 let jobRunning = false;
 let exportingLog = false;
+let promptTimer;
+let promptRevision = 0;
 let hfReady = {{ hf_token_set|tojson }};
 
 function updateStartState() {
@@ -537,13 +549,13 @@ function updateModelRepository() {
     : 'FP32 or INT8 affects recognition only, not speaker identification.';
   $('batchLabel').textContent = isMLX ? 'CPU fallback batch size' : 'CPU batch size';
   $('batchHint').textContent = isMLX ? 'Only used if MLX falls back to CPU.' : 'Applies to CPU recognition.';
-  $('hotwords').disabled = isMLX;
   $('hotwordsHint').textContent = isMLX
-    ? 'MLX does not support separate hotwords. Use the initial prompt for essential terms. Your hotwords remain here for CPU selection and are not sent on MLX jobs, even on fallback.'
+    ? 'Vocabulary is appended to the MLX initial prompt. It may not persist beyond the first decoded window. CPU fallback uses separate fields.'
     : 'Separate vocabulary hint for CPU recognition. Keep only useful names and uncommon terms.';
+  $('effectiveHotwordsField').classList.toggle('hidden', isMLX);
   $('engineHint').textContent = option?.dataset.description || '';
 }
-$('model').addEventListener('change', updateModelRepository);
+$('model').addEventListener('change', () => { updateModelRepository(); updatePromptCounts(); });
 updateModelRepository();
 
 function updatePromptCounts() {
@@ -551,6 +563,34 @@ function updatePromptCounts() {
     const value = $(field).value.trim();
     const words = value ? value.split(/\s+/u).length : 0;
     $(counter).textContent = words + ' words · ' + Array.from(value).length + ' characters';
+  }
+  clearTimeout(promptTimer);
+  const revision = ++promptRevision;
+  $('promptBudget').textContent = 'Checking local tokenizer…';
+  $('effectivePrompt').value = '';
+  $('effectiveHotwords').value = '';
+  promptTimer = setTimeout(() => refreshPromptPreview(revision), 250);
+}
+async function refreshPromptPreview(revision) {
+  try {
+    const plan = await jsonFetch('/api/prompt-preview', {
+      method:'POST', headers:{'Content-Type':'application/json', 'X-NixScribe-Action':'prompt-preview'},
+      body:JSON.stringify({model:$('model').value, initial_prompt:$('initialPrompt').value, hotwords:$('hotwords').value})
+    });
+    if (revision !== promptRevision) return;
+    $('effectivePrompt').value = plan.initial_prompt;
+    $('effectiveHotwords').value = plan.hotwords;
+    if (!plan.available) {
+      $('promptBudget').textContent = 'Token count unavailable until the CPU tokenizer is cached. Checked before recognition.';
+      return;
+    }
+    $('promptCount').textContent = plan.initial_tokens + ' tokens (context alone)';
+    $('hotwordsCount').textContent = plan.vocabulary_tokens + ' tokens (vocabulary alone)';
+    $('promptBudget').textContent = plan.effective_tokens + ' / ' + plan.limit +
+      ' tokens (' + (plan.engine === 'mlx' ? 'combined MLX prompt' : 'conservative CPU total budget') + ')' +
+      (plan.over_limit ? ' — Too long. Shorten before starting; no text will be discarded.' : '');
+  } catch (e) {
+    if (revision === promptRevision) $('promptBudget').textContent = e.message || 'Local tokenizer unavailable.';
   }
 }
 function addAustralianSpelling() {
@@ -904,7 +944,7 @@ $('startBtn').addEventListener('click', async () => {
     srt_max_lines: Number($('srtLines').value),
     srt_max_duration: Number($('srtDuration').value),
     initial_prompt: $('initialPrompt').value.trim(),
-    hotwords: $('hotwords').disabled ? '' : $('hotwords').value.trim(),
+    hotwords: $('hotwords').value.trim(),
   };
   try {
     await jsonFetch('/api/start', {

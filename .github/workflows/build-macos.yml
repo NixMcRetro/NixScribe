@@ -51,6 +51,11 @@ jobs:
       - name: Test application job lifecycle without inference
         run: .build-venv/bin/python -m unittest discover -s tests -p "test_job_lifecycle.py" -v
 
+      - name: Verify prompt preparation and pinned decoder contract without inference
+        run: |
+          .build-venv/bin/python -m unittest discover -s tests -p "test_prompt_handling.py" -v
+          .build-venv/bin/python -m unittest discover -s tests -p "installed_prompt_contract.py" -v
+
       - name: Verify macOS bundle
         run: |
           file "dist/NixScribe.app/Contents/MacOS/NixScribe"
@@ -107,6 +112,9 @@ jobs:
               grep -q 'id="diarizationDevice"' /tmp/nixscribe-index.html
               grep -q 'id="mlxPrecision"' /tmp/nixscribe-index.html
               grep -q 'id="promptCount"' /tmp/nixscribe-index.html
+              grep -q 'id="effectivePrompt"' /tmp/nixscribe-index.html
+              curl -fsS -X POST -H 'Content-Type: application/json' -H 'X-NixScribe-Action: prompt-preview' -d '{"model":"mlx-large-v3","initial_prompt":"A technical interview.","hotwords":"oscilloscope"}' http://127.0.0.1:8765/api/prompt-preview > /tmp/nixscribe-prompt.json
+              python -c 'import json; p=json.load(open("/tmp/nixscribe-prompt.json")); assert p["available"] and not p["over_limit"] and p["effective_tokens"] > 0 and p["initial_prompt"] == "A technical interview.\n\noscilloscope" and p["hotwords"] == ""'
               grep -q 'id="hotwordsHint"' /tmp/nixscribe-index.html
               grep -q 'id="australianSpellingBtn"' /tmp/nixscribe-index.html
               grep -q 'class="brand-icon"' /tmp/nixscribe-index.html
