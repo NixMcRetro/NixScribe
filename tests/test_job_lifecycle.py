@@ -1,5 +1,7 @@
 """Job lifecycle checks using Flask's local test client; no inference or media."""
+import contextlib
 import importlib.util
+import io
 from pathlib import Path
 import tempfile
 import unittest
@@ -21,6 +23,15 @@ class JobLifecycleTests(unittest.TestCase):
         with self.app.state_lock:
             self.app.STATE.clear()
             self.app.STATE.update(self.state)
+
+    def test_live_preview_does_not_echo_private_text(self):
+        terminal = io.StringIO()
+        with contextlib.redirect_stdout(terminal):
+            capture = self.app.LiveTranscriptCapture(None, max_lines=30)
+            with contextlib.redirect_stdout(capture):
+                print("Transcript: [0.0 --> 1.0] Synthetic private words.")
+        self.assertEqual(terminal.getvalue(), "")
+        self.assertIn("Synthetic private words.", self.app.STATE["live_preview"])
 
     def test_job_claim_rechecked_after_validation(self):
         def another_request_claimed():

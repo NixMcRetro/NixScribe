@@ -703,7 +703,7 @@ def _run_job(config: dict[str, Any]) -> None:
             except Exception as exc:
                 _cancel_if_requested()
                 _append_log(f"MLX attempt failed after {time.monotonic() - attempt_started:.1f}s: "
-                            f"{type(exc).__name__}: {exc}")
+                            f"{type(exc).__name__}; private worker output omitted")
                 model_id = MLX_CPU_FALLBACK[requested_model]
                 repository = repository_for(model_id)
                 _append_log(f"Retrying speech recognition with {model_id} (CPU, float32)")
@@ -762,7 +762,8 @@ def _run_job(config: dict[str, Any]) -> None:
                 8.0,
                 66.0,
             )
-            live_capture = LiveTranscriptCapture(sys.stdout, max_lines=30)
+            # Verbose recognition belongs in the local preview, never terminal logs.
+            live_capture = LiveTranscriptCapture(None, max_lines=30)
             with contextlib.redirect_stdout(live_capture):
                 result = model.transcribe(
                     audio,
