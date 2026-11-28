@@ -117,12 +117,9 @@ def transcribe_mlx(audio_path: Path, model: str, snapshot: Path, duration: float
                         pass
                 check_cancel()
                 if rc != 0 or not result_path.is_file():
-                    output.seek(0, 2)
-                    output.seek(max(0, output.tell() - 3000))
-                    detail = output.read().decode("utf-8", errors="replace").strip()
+                    # Worker stdout/stderr may contain private prompt or speech.
                     raise RuntimeError(
-                        "MLX Whisper failed. You can retry using a CPU model."
-                        + ("\n" + detail if detail else "")
+                        f"MLX Whisper worker failed (exit {rc}). You can retry using a CPU model."
                     )
                 result = json.loads(result_path.read_text(encoding="utf-8"))
                 return normalize_segments(result, duration)

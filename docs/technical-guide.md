@@ -109,7 +109,41 @@ cancellable worker process releases the GPU model before CPU forced alignment
 and speaker identification. TXT, SRT and MP3 outputs are unchanged.
 
 The CPU engine's compute type, batch size, and hotwords are not applicable to
-MLX. Context remains available. The MLX API does not provide the existing
+MLX as a separate argument. Both editable fields remain visible. On MLX the
+initial prompt and vocabulary are joined with two newlines; CPU receives the
+original fields separately, including on automatic CPU fallback. The preview
+uses the same local preparation function as recognition. MLX uses its bundled
+tokenizer (100-language multilingual vocabulary for both large-v3 variants);
+CPU uses the selected cached tokenizer.json without loading model weights.
+Preview never downloads a tokenizer. If the CPU tokenizer is absent, token
+counts are unavailable until cached, and validation repeats before recognition.
+
+Both supported MLX models have a 448-token decoder context; the decoder retains
+the last 223 prompt tokens. Faster-Whisper separately caps hotwords at the
+first 223 tokens and prior prompt tokens at the last 223. NixScribe limits the
+combined CPU input to 223 tokens as a conservative budget to preserve decoder
+space; this is an app policy, not the CPU engine's separate per-field limits.
+Over-budget prompts are rejected, not truncated. Counts include the leading
+space added by the pinned recognisers. MLX combined token counts are measured
+on the joined string, not inferred by adding two independent counts. The
+pinned MLX source contract is tested in CI: the initial prompt is seeded before
+decoding and reset after a decoded window when condition_on_previous_text is
+False (or high temperature). No change to this default or guaranteed prompt
+persistence is claimed. In the pinned MLX decoder, later decoded windows
+can lose the fixed user prompt when previous-text conditioning is disabled.
+This differs from WhisperX's batched CPU path: its model constructs a fresh
+prompt from the original user context and hotwords for each batch, without
+carrying generated text from earlier batches. The installed-source contract
+checks the pipeline dispatch and model implementation separately. Do not
+enable previous-text conditioning globally as a substitute for fixed prompt
+persistence. The Australian English button remains an editable hint, not a
+spelling rewrite. Activity logs and recognition metadata include engine,
+counts and budget, not prompt text or token IDs; fields are not
+persisted automatically. Save and load vocabulary profiles using native file
+choosers. Profiles contain both original fields as plaintext JSON, saved
+with owner-only permissions and no overwrite. They can contain sensitive
+terms; choose a private local folder. Loading validates the schema and size
+before replacing the fields, and asks for confirmation if either is populated. The MLX API does not provide the existing
 WhisperX progress callback, so during recognition the app reports the active
 stage without pretending to know its percentage. The transcript appears after
 that pass. A failed MLX download or inference automatically retries the matching CPU model (large-v3 or large-v3-turbo) in float32. Cancellation never starts a fallback. Both attempted and successful models are logged. The GPU and CPU
@@ -327,7 +361,7 @@ TXT now contains speaker-labelled paragraphs without timestamps, e.g.
 `[SPEAKER_00] Hello.`. Consecutive segments from the same speaker are combined
 by default; turn off that option if you want a paragraph for each segment.
 
-SRT keeps timestamps. It normally includes speaker labels, a maximum of two
+SRT keeps timestamps. Speaker labels are optional and off by default, with a maximum of two
 lines, 42 characters per line, and six seconds per cue. The export controls let
 you toggle SRT speaker labels and change width, line count and cue duration.
 Both exports and the final preview split recognition segments at actual

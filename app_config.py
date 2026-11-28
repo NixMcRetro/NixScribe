@@ -1,5 +1,5 @@
 """Shared version and supported CPU Whisper models."""
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 # Repository IDs match the aliases in Faster-Whisper 1.2.1.
 # Publisher means the Hugging Face repository owner, not the model developer.
 MODEL_REPOSITORIES = {

@@ -56,9 +56,8 @@ Readable words, timed subtitles and optional audio. No overwriting earlier proje
 
 - **v0.3.0** · Apple silicon acceleration
 - **[v0.3.1](https://github.com/NixMcRetro/NixScribe/releases/tag/v0.3.1)** · Diarization validation, backend selection and interface polish
-- **v0.3.2** · Speaker-count estimation and short-duration speaker recovery
-- **v0.4.0** · Multi-source transcription
-- **v0.5.0** · Local AI-assisted reconciliation
+- **v0.4.0** · Single-source reliability and application delivery (release candidate)
+- **Future research** · Speaker-count estimation, short-duration speaker recovery, independent-device multi-source transcription and local AI-assisted reconciliation
 
 ## 🛠️ Curious how it works?
 
