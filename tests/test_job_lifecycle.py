@@ -24,6 +24,23 @@ class JobLifecycleTests(unittest.TestCase):
             self.app.STATE.clear()
             self.app.STATE.update(self.state)
 
+    def test_copy_activity_log_uses_utf8_locale(self):
+        entries = ["Recording 11.28.55\u202fam.mov", "Unicode: café 日本語"]
+        self.app._update(log=entries)
+        with patch.object(self.app.sys, "platform", "darwin"), \
+             patch.dict(self.app.os.environ, {"LC_ALL": "C", "LANG": "C"}), \
+             patch.object(self.app.subprocess, "run") as run:
+            response = self.client.post("/api/log/copy", json={},
+                                        headers={"X-NixScribe-Action": "copy-log"})
+        self.assertEqual(response.status_code, 200)
+        run.assert_called_once()
+        args, kwargs = run.call_args
+        self.assertEqual(args[0], ["/usr/bin/pbcopy"])
+        self.assertEqual(kwargs["input"], "\n".join(entries) + "\n")
+        self.assertEqual(kwargs["encoding"], "utf-8")
+        self.assertEqual(kwargs["env"]["LC_ALL"], "en_US.UTF-8")
+        self.assertEqual(kwargs["env"]["LANG"], "C")
+
     def test_live_preview_does_not_echo_private_text(self):
         terminal = io.StringIO()
         with contextlib.redirect_stdout(terminal):

@@ -1298,8 +1298,10 @@ def copy_activity_log():
     if not entries:
         return jsonify({"ok": False, "error": "No activity to copy yet."}), 400
     try:
+        # pbcopy interprets stdin using its locale, which may be unset in Finder launches.
         subprocess.run(["/usr/bin/pbcopy"], input="\n".join(entries) + "\n",
-                       encoding="utf-8", capture_output=True, check=True, timeout=5)
+                       encoding="utf-8", env={**os.environ, "LC_ALL": "en_US.UTF-8"},
+                       capture_output=True, check=True, timeout=5)
         return jsonify({"ok": True})
     except Exception:
         return jsonify({"ok": False, "error": "Could not copy to the macOS clipboard."}), 500

@@ -286,7 +286,8 @@ The build includes FluidAudio's Apache-2.0 license.
 ## Activity log
 
 The Activity log is always expanded. Click **Copy Activity Log** to copy the
-full current job to the macOS clipboard, or **Export Log** to choose a folder
+full current job to the macOS clipboard using an explicit UTF-8 locale (including
+Unicode filenames), or **Export Log** to choose a folder
 and save a uniquely named private UTF-8 text snapshot. The log does not drop
 older entries. It remains available after completion, cancellation or failure
 until the next job starts or the app quits. The viewport follows new entries
